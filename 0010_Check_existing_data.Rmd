@@ -1,0 +1,225 @@
+---
+title: "0010_Check_Vannmiljø"
+author: "DHJ"
+date: "2022-11-11"
+output: html_document
+---
+
+
+## 1. Setup  
+
+### Functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+## 2.  Check Vannmiljø export    
+
+In https://vannmiljo.miljodirektoratet.no/
+"Jeg vil" => Søk i vannregistreringer og lokaliteter
+Select records: 
+  in menu "Forvaltningsaktivitet": select "Miljøgifter i en urban fjord"
+  in menu "Prøvedato": select from 01/01/2016 to 31/12/2021
+
+```{r}
+
+dat_vm <- read_excel("Input_data/Vannmiljøexport_Urbanfjord_9Nov2022/VannmiljoEksport.xlsx", guess_max = 10000)
+
+dat_vm <- dat_vm %>%
+  mutate(
+    Time = ymd_hms(Tid_provetak)
+  )
+
+table(year(dat_vm$Time))
+
+```
+
+#### Number of parameters per matrix   
+```{r}
+
+dat_vm %>%
+  count(Medium_navn, Parameter_navn, Year = year(Time)) %>%
+  xtabs(~Medium_navn + Year, .)
+
+```
+
+#### Parameters  
+```{r}
+
+# xtabs(~Parameter_navn + year(Time), dat_vm)
+
+```
+
+
+##3.  Check existing NIVAbasen data    
+```{r}
+
+# From further down  
+#   PROJECT_ID PROJECT_NAME          PROJECT_DESCRIPTION  STARTDATE    ENDDATE ENTERED_BY        ENTERED_DATE           O_NUMBER
+# 1       8551  Urban fjord Miljøgifter i en urban fjord 2013-01-01 2020-12-31        WEB 2015-11-04 15:33:30 13239,17146,210135
+
+df_projects <- get_projects()   
+df_stations <- get_stations_from_project("Urban fjord", ignore.case = FALSE)
+nrow(df_stations)
+
+```
+
+#### Get all data  
+
+```{r}
+
+# 
+## Biota samples
+#
+
+df_specimens <- get_specimens_from_stationdata(df_stations, years = 2017:2021)
+message("No. of specimens, biota: ", nrow(df_specimens))
+dat_biota <- get_biota_chemistry(2017:2021, df_specimens, df_stations, report_samples = TRUE)
+
+#
+## Water samples  
+#
+
+df_samples_water <- get_nivabase_selection(
+  "*",
+  "WATER_SAMPLES",
+  "STATION_ID",
+  df_stations$STATION_ID
+)
+message("No. of samples, water: ", nrow(df_samples_water))
+
+# Adds "SAMPLE_TYPE", "SAMPLE_NUMBER", "DESCRIPTION" and "n_labware" from Labware
+
+# debugonce(get_water_chemistry_from_stations)
+dat_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), 2017:2021)
+
+
+df_samples_sediment <- get_nivabase_selection(
+  "*",
+  "SEDIMENT_SAMPLES",
+  "STATION_ID",
+  df_stations$STATION_ID
+)
+message("No. of samples, sediment: ", nrow(df_samples_sediment))
+
+dat_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, years = 2017:2021)
+
+dat_sediment_methods <- get_chemistry_methods(method_id = unique(dat_sediment$METHOD_ID))
+
+dat_sediment <- dat_sediment %>%
+  left_join(dat_sediment_methods) %>%
+  mutate(Year = year())
+
+```
+
+#### Number of parameters, biota   
+```{r}
+
+dat_biota %>%
+  distinct(LATIN_NAME, NAME, Year = year(SAMPLE_DATE)) %>%
+  xtabs(~LATIN_NAME + Year, .)  
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_biota)
+
+```
+
+
+#### Number of parameters, water    
+```{r}
+
+dat_water %>%
+  distinct(STATION_NAME, NAME, Year = year(SAMPLE_DATE)) %>%
+  xtabs(~addNA(STATION_NAME) + Year, .)    
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_water)
+
+```
+
+
+#### Number of parameters, sediment    
+```{r}
+
+dat_sediment %>%
+  distinct(STATION_NAME, NAME, Year = year(SAMPLE_DATE)) %>%
+  xtabs(~addNA(STATION_NAME) + Year, .)    
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_sediment)
+
+```
+
+
+## 3.  Check existing Labware parameters      
+
+```{r}
+
+sql <- "select * from NIVADATABASE.LABWARE_CHECK_SAMPLE order by SAMPLE_DATE ASC limit 200"
+check <- get_nivabase_data(sql)
+
+```
+
+```{r}
+
+variablestring <- "SAMPLE_TYPE, AQUAMONITOR_ID, AQUAMONITOR_CODE, TEXT_ID, DESCRIPTION, REPORTED_NAME, ANALYS, PARAM"
+
+sql <- paste(
+  "select", variablestring, "from NIVADATABASE.LABWARE_IMPORT where REPORTED_NAME = 'PFOSA'"
+)
+check <- get_nivabase_data(sql)
+
+
+sql <- paste(
+  "select", variablestring, "from NIVADATABASE.LABWARE_IMPORT where lower(REPORTED_NAME) like '%pfosa%'"
+)
+check <- get_nivabase_data(sql)
+
+xtabs(~REPORTED_NAME, check)
+
+```
+
+
+
+## 4.  Check existing Labware stations/years  
+
+### Especially sediment at Cm21 in 2019  
+
+```{r}
+
+variablestring <- "SAMPLE_TYPE, SAMPLE_DATE, AQUAMONITOR_ID, AQUAMONITOR_CODE, TEXT_ID, DESCRIPTION, REPORTED_NAME, ANALYS, PARAM, STATUS, STATUSX"
+
+sql <- paste(
+  "select", variablestring, "from NIVADATABASE.LABWARE_IMPORT where AQUAMONITOR_CODE = 'Cm21'"
+)
+check <- get_nivabase_data(sql)
+
+sql <- paste(
+  "select * from NIVADATABASE.LABWARE_IMPORT where AQUAMONITOR_CODE = 'Cm21'"
+)
+check <- get_nivabase_data(sql)
+
+xtabs(~TEXT_ID, check)
+xtabs(~TEXT_ID, check)
+xtabs(~TEXT_ID, check)
+
+check %>%
+  count(TEXT_ID, SAMPLED_DATE)
+
+```
