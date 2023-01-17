@@ -1,0 +1,510 @@
+---
+title: "0100_Data_from_excel_2020"
+author: "DHJ"
+date: "2022-11-11"
+output: html_document
+---
+
+
+No data in Vannmiljø for 2016-2019
+
+In https://vannmiljo.miljodirektoratet.no/
+"Jeg vil" => Søk i vannregistreringer og lokaliteter
+Select records: 
+  in menu "Forvaltningsaktivitet": select "Miljøgifter i en urban fjord"
+  in menu "Prøvedato": select from 01/01/2016 to 31/12/2019
+Returns no records ("Info! Søket gav ingen treff")
+
+---------------------------------------------------------------
+
+PARAMETERS
+(see part 8)
+
+NIVA:
+- PFAS
+- UV-chemicals (Octocrylene, benzophenone-3, ethylhexylmethoxycinnamate (plus UV-
+    327, -328 and -329))
+- Behentrimonium (ATAC-C20 and ATAC-C22)
+- Biological effect parameters: Acetylcholinesterase (AChE)
+
+NILU:
+- metals
+- PCBs, BDEs, brominated flame retardants and CPs (SCCP, MCCP)  
+- alkylphenols and bisphenols
+- siloxans
+- PFRs (phosphorous flame retardants)
+- antioxidant MB1
+- M3T(Ph)
+- Dechlorane plus and related compounds
+
+IFE:
+- stable isotopes of carbon and nitrogen
+
+The concentrations of the following contaminants were expressed on a lipid weight basis: 
+ PCBs and other organochlorine compounds, chlorinated paraffins, brominated flame retardants, 
+ siloxanes (including M3T(Ph)), UV-filters and declorane plus (antioxidant MB1 was not 
+ analysed in sufficient species for such evaluation in 2019). 
+Behentrimonium was expressed at both wet weight and lipid weight basis
+ when exploring correlations between contaminant concentrations and trophic position.
+
+TABLES OF SUBSTANCES USED  
+df_substances  
+- contains substance names (used in Excel), Decription (long name), Chemspider and CAS   
+- this equals appendix table B1 of the report  
+df_substance_lookup  
+- contains substance names (used in Excel), Group and Lab   
+  
+
+CHECKLIST FOR IMPORT - WHEN DATA ARE IN LABWARE_IMPORT + LABWARE_CHECK_SAMPLE, BUT NOT IN NIVADATABASE:  
+1. Has STATION_CODE been set?  
+2. Has sample number (e.g. 1-15) been set?  
+  
+If not 1 and/or 2, the lab has to make update!  
+  
+
+## 1. Setup  
+
+### Functions  
+```{r}
+
+# library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+### Year  
+```{r}
+
+year_sampling <- 2020
+
+```
+
+
+
+### Nivadatabase password   
+* Not needed - assume that password is set ising the 'keyring' package  
+```{r, echo = FALSE}
+
+### Set Nivadabase password 
+
+# Do this once:
+# key_set_with_value(service = "NIVAbasen",
+#                    username = "DHJ",
+#                    password = "***")
+
+# db_username <- "DHJ"
+# db_privkey <- sodium::keygen()
+# db_pubkey <- sodium::pubkey(db_privkey)
+# db_pwd <- sodium::simple_encrypt(
+#   serialize(
+#     keyring::key_get(service = "NIVAbasen", username = "DHJ"), NULL), 
+#   db_pubkey)
+
+# Or do this:
+# set_credentials()
+
+    
+```
+
+
+### Lookup tables   
+* Substance to substance group (Group) + Lab (NIVA / NILU etc)     
+* Substance to substance name and CAS (used for populating METHOD_DEFINITIONS)     
+* TISSUE_ID to TISSUE   
+* SPECIE_ID to LATIN_NAME  
+```{r}
+
+# Look-up for substance groups (Group) + Lab (NIVA / NILU etc)    
+# "Hand-made" in Excel
+lookup_substance_groups <- readxl::read_excel("Input_data/Lookup_files/992_Excel_substances.xlsx")
+
+# Look-up for substance names + CAS numbers   
+# - contains substance names (used in Excel), Decription (long name), Chemspider and CAS 
+# - this equals appendix table B1 of the report
+lookup_substance_names <- readRDS("Input_data/Lookup_files/Report2019_substancetable.rds") 
+
+# From Nivabasen
+# TISSUE_ID 
+
+if (FALSE){
+  # If we want to read from Nivabase
+  lookup_tissues <- get_nivabase_data("select * from LABWARE.V_NIVA_TISSUE_TYPES", source = 'NIVABASE')
+  lookup_species <- get_nivabase_data("select * from LABWARE.V_NIVA_SPECIES", source = 'NIVABASE')
+}
+
+lookup_tissues <- read.csv("Input_data/Lookup_files/lookup_tissues.csv")
+lookup_species <- read.csv("Input_data/Lookup_files/lookup_species.csv")
+
+```
+
+
+## 2. Project ID  
+```{r}
+
+df_projects <- get_projects() 
+# Add O-numbers
+df_o_numbers <- get_nivabase_data("select PROJECT_ID, O_NUMBER from NIVADATABASE.PROJECTS_O_NUMBERS") %>%
+  group_by(PROJECT_ID) %>%
+  summarise(O_NUMBER = paste(O_NUMBER, collapse = ","), .groups = "drop")
+df_projects <- left_join(df_projects, df_o_numbers, by = "PROJECT_ID")
+
+# Pick projects by name
+df_projects_sel <- df_projects %>% 
+  filter(grepl("urban", PROJECT_NAME, ignore.case = TRUE))
+
+proj_ids <- unique(df_projects_sel$PROJECT_ID)
+
+df_projects_sel
+
+```
+
+## 3. Check existing samples   
+
+### Get stations and station IDs from old data       
+```{r}
+
+df_stations <- readRDS("Input_data/Lookup_files/992_df_stations_2019.rds") %>%
+  ungroup() %>%
+  rename(STATION_ID = AQUAMONITOR_ID)
+
+df_station_names <- get_nivabase_selection(
+  "STATION_ID, STATION_CODE, STATION_NAME, PROJECT_ID",
+  "PROJECTS_STATIONS",
+  "STATION_ID",
+  df_stations$STATION_ID, 
+  extra_sql = "and PROJECTS_STATIONS.PROJECT_ID = 8551"
+)
+
+df_stations <- df_stations %>%
+  left_join(df_station_names)
+  
+writexl::write_xlsx(df_stations, "Data/lookup_stations_urbanfjord.xlsx")
+
+
+```
+
+### Add station type    
+```{r}
+
+df_for_join1 <- get_nivabase_selection(
+  "STATION_ID, STATION_TYPE_ID",
+  "STATIONS",
+  "STATION_ID",
+  df_stations$STATION_ID)
+
+df_for_join2 <- get_nivabase_selection(
+  "STATION_TYPE_ID, STATION_TYPE, STATION_TYPE_DESCR",
+  "STATION_TYPES",
+  "STATION_TYPE_ID",
+  unique(df_for_join1$STATION_TYPE_ID))
+
+df_stations <- df_stations %>%
+  left_join(df_for_join1) %>%
+  left_join(df_for_join2)
+
+df_stations %>%
+  group_by(STATION_TYPE) %>%
+  summarise(AQUAMONITOR_CODEs = paste(AQUAMONITOR_CODE, collapse = ";"))
+
+```
+
+### Get biota measurements, 2020  
+```{r}
+
+df2 <- get_nivabase_selection(
+  "STATION_ID, SPECIMEN_ID, SPECIMEN_NO, DATE_CAUGHT, TAXONOMY_CODE_ID",
+  "BIOTA_SINGLE_SPECIMENS",
+  "STATION_ID",
+  unique(df_stations$STATION_ID)  
+)
+
+unique(year(df2$DATE_CAUGHT))  
+
+df3 <- get_nivabase_selection(
+  "SPECIMEN_ID, SAMPLE_ID",
+  "BIOTA_SAMPLES_SPECIMENS",
+  "SPECIMEN_ID",
+  unique(subset(df2, year(df2$DATE_CAUGHT) == year_sampling)$SPECIMEN_ID)  
+)
+
+# Standard units (from script 994-2020)
+fn <- "../Milkys2_pc/Files_to_Jupyterhub_2019/Lookup table - standard units.xlsx"
+lookup_standard_units <- read_excel(fn)
+
+# IMPORTANT! Add MG_P_KG to MG_P_KG!
+lookup_standard_units <- lookup_standard_units %>%
+  bind_rows(
+    tibble(UNIT_orig = "MG_P_KG", UNIT = "MG_P_KG", Factor = 1)
+  )
+
+# 2 minutes  
+# debugonce(get_biota_chemistry)
+dat_biota <- get_biota_chemistry(
+  year_sampling,
+  specimendata = df2,
+  stationdata = df_stations
+)
+
+```
+
+#### Water 2020  
+
+```{r}
+
+# Get projects with data from Skjælholmene
+id <- df_stations %>% filter(STATION_NAME == "Skjælholmene") %>% pull(STATION_ID) 
+
+df_proj_stat1 <- get_nivabase_selection(
+  "PROJECT_ID, STATION_ID",
+  "PROJECTS_STATIONS",
+  "STATION_ID",
+  id
+)
+# Only one project ID: 8551
+
+# Get all station IDs
+df_proj_stat2 <- get_nivabase_selection(
+  "PROJECT_ID, STATION_ID",
+  "PROJECTS_STATIONS",
+  "PROJECT_ID",
+  8551
+)
+
+dat_water <- get_water_chemistry_from_stations(unique(df_proj_stat2$STATION_ID), year_sampling)
+
+
+```
+
+
+#### Sediment 2020  
+
+```{r}
+
+dat_sediment <- get_sediment_chemistry_from_stations(unique(df_proj_stat2$STATION_ID), year_sampling)
+
+dat_sediment_methods <- get_chemistry_methods(method_id = unique(dat_sediment$METHOD_ID))
+
+dat_sediment <- dat_sediment %>%
+  left_join(dat_sediment_methods)
+
+```
+
+## 4. Join with with labware data  
+
+### All labware sample data for these stations   
+
+* Note: all years!
+
+```{r}
+
+df_samples_labware_initial <- get_nivabase_selection(
+    "TEXT_ID, STATUS, SPECIES, TISSUE, BIOTA_SAMPLENO, X_BULK_BIO, DESCRIPTION, AQUAMONITOR_ID, AQUAMONITOR_CODE", 
+    "LABWARE_CHECK_SAMPLE",
+    "AQUAMONITOR_ID", 
+    df_stations$STATION_ID, values_are_text = FALSE)
+
+nrow(df_samples_labware_initial)
+# 435
+
+df_samples_labware_initial$TEXT_ID %>% substring(4,7) %>% table()
+
+# df_samples_labware_initial$TEXT_ID %>% table() %>% table()
+
+```
+
+
+### Get data from LABWARE_IMPORT and LABWARE_CHECK_SAMPLE    
+Using function 'get_labware_samples'  
+```{r}
+
+df_samples_labware <- get_labware_samples(df_samples_labware_initial$TEXT_ID)
+
+```
+
+
+
+### Show summary of sample numbers  
+```{r}
+
+df1 <- df_samples_labware %>%
+  mutate(ID = as.numeric(substr(TEXT_ID, 9, 13)),
+         Year = as.numeric(substr(TEXT_ID, 4, 7))) %>%
+  group_by(SAMPLE_TYPE, AQUAMONITOR_ID, AQUAMONITOR_CODE, TISSUE, Year) %>%
+  summarise(n = n(), Id_min = min(ID), Id_max = max(ID), .groups = "drop") %>%
+  arrange(Year, Id_min)
+
+df1
+
+df1 %>% 
+  select(SAMPLE_TYPE, AQUAMONITOR_ID, AQUAMONITOR_CODE, TISSUE, Year, n) %>%
+  pivot_wider(names_from = Year, values_from = n)
+
+```
+
+## 6. External data    
+
+### a. NILU  
+
+
+#### Read and select rows    
+
+```{r}
+
+fn <- "Input_data/2020/NILU/004C NILU data stacked.txt"
+df_nilu_all <- read.delim(fn)  
+
+if (FALSE){
+  
+# All data = including rows with no actual data in them
+df_nilu_all %>%
+  distinct(Matrix, Label) %>%
+  xtabs(~Matrix, .)
+  
+}
+
+# Empty cells are not NA, they are empty character ("")
+sel_rows <- df_nilu_all$Data != "" | df_nilu_all$LOQ  != ""
+
+message("Fraction of rows with data: ", mean(sel_rows))  # 0.67
+
+#
+# Actual data
+#
+df_nilu <- df_nilu_all[sel_rows,]
+
+cat(nrow(df_nilu), "rows\n")
+
+```
+
+#### Number of substances  
+
+```{r}
+
+cat("Number of parameters: \n\n") 
+df_nilu %>%              # View()
+  distinct(Matrix, Label) %>%
+  xtabs(~Matrix, .)
+
+```
+
+#### Actual substances  
+
+- Save overview of parameters and ID
+
+```{r}
+
+# A random sample  
+df_nilu %>% 
+  xtabs(~Label, .) %>% 
+  sample(30)
+
+# Save to file
+list(
+  Parameters = df_nilu %>% count(Label),
+  TEXT_ID = df_nilu %>% count(LIMS.NR)
+  ) %>%
+  writexl::write_xlsx("Data/NILU_2020_overview.xlsx")
+
+```
+
+#### Check NR numbers  
+
+- All TEXT_ID in labware samples are found in NILU data  
+- NILU data have 16 bile samples just marked with "galle1-galle16" - phenols measured  
+
+```{r}
+
+nr1 <- df_samples_labware %>% 
+  filter(grepl(as.character(year_sampling), TEXT_ID)) %>%
+  pull(TEXT_ID)
+
+nr2 <- df_nilu %>%
+  distinct(LIMS.NR) %>%
+  pull(LIMS.NR)
+
+# setdiff(1:5, 2:3)
+setdiff(nr1, nr2)
+setdiff(nr2, nr1)  # Galle 1-15 is in nr2 (NILU data) but not in 'df_samples_labware'  
+
+```
+
+
+### IFE  
+
+- Isotopes  
+
+#### Read and select rows    
+
+```{r}
+
+fn <- "Input_data/2020/IFE/010 LIMS numbers and data IFE.txt"
+readLines(fn, 2)
+
+df_ife_all <- read.delim(fn)  
+
+# Empty cells are not NA, they are empty character ("")
+sel_rows <- df_ife_all$d13CVPDB != "" 
+
+message("Fraction of rows with data: ", mean(sel_rows))  # 0.67
+
+# View(df_ife_all[!sel_rows,])
+
+#
+# Actual data
+#
+df_ife <- df_ife_all[sel_rows,]
+
+cat(nrow(df_ife), "rows\n")
+
+```
+
+#### Lines with no data has some pooled sample info  
+```{r}
+
+df_ife_all[!sel_rows,] %>%
+  filter(Column.2 != "") %>%
+  select(Column.2, Column.3, Column.4, Individual)
+
+```
+#### Fix data  
+```{r}
+
+# df_ife %>% names() %>% dput()
+
+vars <- c("d13CVPDB", "d15NAIR", "W.C", 
+          "W.N", "C.N.W.Ratio", "Trophic.level", "Average.SD.ARU")
+
+for (var in vars){
+  df_ife[[var]] <- as.numeric(gsub(",", ".", df_ife[[var]]))
+}
+
+```
+
+
+#### Substances = d13C and d15N    
+
+```{r}
+
+ggplot(df_ife, aes(d13CVPDB, d15NAIR, color = Specification)) +
+  geom_point()
+
+```
+
+
+
+## .
+## .
+## .
+## .
