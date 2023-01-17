@@ -1,0 +1,6 @@
+From 
+  C:\Data\seksjon 212\Milkys\Data_Urbanfjord
+
+where they were created using 
+  992_Vannmiljo_Urban_fjord_2019.Rmd
+  992_Vannmiljo_Urban_fjord_2020.Rmd

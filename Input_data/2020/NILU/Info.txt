@@ -1,0 +1,23 @@
+
+Meretes OneDrive sync'et to 
+C:\Users\DHJ\NIVA\Merete Grung - 13239 Urban fjord 2020\JMP
+
+'004C NILU data stacked' exported from JMP to txt (tab-delimited, stored in same place) - then downloaded to hard disk
+
+
+From: Merete Grung <merete.grung@niva.no> 
+Sent: torsdag 21. april 2022 09:18
+To: Dag Øystein Hjermann <Dag.Hjermann@niva.no>; Anders Ruus <anders.ruus@niva.no>
+Cc: Morten Jartun <Morten.Jartun@niva.no>
+Subject: RE: Vannmiljø?
+
+Hei Dag, 
+Her er lenke til Urban fjord – data ligger i JMP-mappa direkte under filen. 
+https://niva365-my.sharepoint.com/:f:/g/personal/merete_grung_niva_no/EpPklufFIIRLsSH-IH3o-UgBGpvvDxu_dzVDU4eoyf6BWA?email=Dag.Hjermann%40niva.no&e=UVe9AE
+
+Du skal finne NILU resultater i 004C NILU data stacked (betyr at NILU oppdaterte data tre ganger…) og 006 NIVA data. Tror IFE-data ligger i 010 LIMS numbers and data IFE. 
+Se også journalen Urban fjord 2020 – der ligger lenker til de viktigste filene (nå med relative adresser, så tror det skal funke…)
+Si fra hvis du har spm. 
+
+Merete
+

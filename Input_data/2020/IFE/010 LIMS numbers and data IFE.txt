@@ -1,0 +1,101 @@
+﻿Lab nr.	not used in foodweb	Matrix_orig	Specification	Blandprøve nr	Prøvested	LIMS_NR	Individual name	Matrix	Abiotic spesification	Art	Species	Organ	Art 2	Matriks	IFE lab ID	d13CVPDB	d15NAIR	W%C	W%N	C/N W Ratio	Trophic level	Average SD ARU	Comment	Column 2	Column 3	Column 4	Individual	Lengde (cm)	Vekt (g)	Levervekt (g)	Kjønn (M/F)	Gonadevekt (g)	alder
+20/2440	1	"Torsk, galle"	Cod bile		Midtmeie	galle1		Biota		Torsk	Cod	bile																					
+20/2441	1	"Torsk, galle"	Cod bile		Midtmeie	galle2		Biota		Torsk	Cod	bile																					
+20/2442	1	"Torsk, galle"	Cod bile		Midtmeie	galle3		Biota		Torsk	Cod	bile																					
+20/2443	1	"Torsk, galle"	Cod bile		Midtmeie	galle5		Biota		Torsk	Cod	bile																					
+20/2444	1	"Torsk, galle"	Cod bile		Midtmeie	galle6		Biota		Torsk	Cod	bile																					
+20/2445	1	"Torsk, galle"	Cod bile		Midtmeie	galle7		Biota		Torsk	Cod	bile																					
+20/2446	1	"Torsk, galle"	Cod bile		Midtmeie	galle8		Biota		Torsk	Cod	bile																					
+20/2447	1	"Torsk, galle"	Cod bile		Midtmeie	galle9		Biota		Torsk	Cod	bile																					
+20/2448	1	"Torsk, galle"	Cod bile		Midtmeie	galle11		Biota		Torsk	Cod	bile																					
+20/2449	1	"Torsk, galle"	Cod bile		Midtmeie	galle12		Biota		Torsk	Cod	bile																					
+20/2450	1	"Torsk, galle"	Cod bile		Midtmeie	galle13		Biota		Torsk	Cod	bile																					
+20/2451	1	"Torsk, galle"	Cod bile		Midtmeie	galle14		Biota		Torsk	Cod	bile																					
+20/2452	1	"Torsk, galle"	Cod bile		Midtmeie	galle15		Biota		Torsk	Cod	bile																					
+20/2453	1	"Torsk, galle"	Cod bile		Midtmeie	galle16		Biota		Torsk	Cod	bile																					
+20/2088	1	"Torsk, lever"	Cod liver	2	Midtmeie	NR-2020-08402		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-1	6						
+20/2089	1	"Torsk, lever"	Cod liver	1	Midtmeie	NR-2020-08403		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-2	14						
+20/2090	1	"Torsk, lever"	Cod liver	1	Midtmeie	NR-2020-08404		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-3	19						
+20/2091	1	"Torsk, lever"	Cod liver	2	Midtmeie	NR-2020-08405		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-4	26						
+20/2092	1	"Torsk, lever"	Cod liver	1	Midtmeie	NR-2020-08406		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-5	13						
+20/2093	1	"Torsk, lever"	Cod liver	3	Midtmeie	NR-2020-08407		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-6	"1,15"						
+20/2094	1	"Torsk, lever"	Cod liver	1	Midtmeie	NR-2020-08408		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-7	"8,17"						
+20/2095	1	"Torsk, lever"	Cod liver	3	Midtmeie	NR-2020-08409		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-8	"4,20"						
+20/2096	1	"Torsk, lever"	Cod liver	3	Midtmeie	NR-2020-08410		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-9	"7,31"						
+20/2097	1	"Torsk, lever"	Cod liver	2	Midtmeie	NR-2020-08411		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-10	"24,28"						
+20/2098	1	"Torsk, lever"	Cod liver	1	Midtmeie	NR-2020-08412		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-11	"12,25,18"						
+20/2099	1	"Torsk, lever"	Cod liver	2	Midtmeie	NR-2020-08413		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-12	"21,22,23,27"						
+20/2100	1	"Torsk, lever"	Cod liver	3	Midtmeie	NR-2020-08414		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-13	"2,3,29,30"						
+20/2101	1	"Torsk, lever"	Cod liver	3	Midtmeie	NR-2020-08415		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-14	"5,16,9,10,11,32"						
+20/2102	1	"Torsk, lever"	Cod liver	2	Midtmeie	NR-2020-08416		Biota		Torsk	Cod	liver												Torsk	Lever	Torskelever-15	"34,35,36,37,38,39,40"						
+20/2425	1	"Torsk, filet 1"	Cod muscle	2	Midtmeie	NR-2020-08417	1	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-016	"-18,08402859"	"16,123782327"	"47,159553678"	"14,720732034"	"3,2036147094"	"4,169324906"			Torsk	Muskel	Torskefilet-1	1	43	740	14	M	"0,3"	3
+20/2426	1	"Torsk, filet 2"	Cod muscle	1	Midtmeie	NR-2020-08418	2	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-017	"-18,35904146"	"15,204450687"	"46,64255677"	"14,552442983"	"3,2051358541"	"3,927395527"			Torsk	Muskel	Torskefilet-2	2	38	530	"8,2"	F	2	na
+20/2427	1	"Torsk, filet 3"	Cod muscle	1	Midtmeie	NR-2020-08419	3	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-018	"-17,86731944"	"16,43020747"	"47,017559822"	"14,865266663"	"3,1629139853"	"4,249963102"			Torsk	Muskel	Torskefilet-3	3	"38,5"	470	"8,6"	M	1	2
+20/2428	1	"Torsk, filet 4"	Cod muscle	2	Midtmeie	NR-2020-08420	4	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-019	"-18,17173941"	"15,838320892"	"48,207584449"	"15,132380642"	"3,1857237529"	"4,094203476"			Torsk	Muskel	Torskefilet-4	4	41	710	"18,8"	M	1	2
+20/2429	1	"Torsk, filet 5"	Cod muscle	1	Midtmeie	NR-2020-08421	5	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-020	"-17,8814024"	"14,02327518"	"47,198965242"	"14,622386714"	"3,2278564481"	"3,616559868"			Torsk	Muskel	Torskefilet-5	5	"36,5"	430	9	M	1	2
+20/2430	1	"Torsk, filet 6"	Cod muscle	3	Midtmeie	NR-2020-08422	6	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-021	"-18,29686799"	"15,727997754"	"47,319182117"	"15,016359053"	"3,1511754581"	"4,065171071"			Torsk	Muskel	Torskefilet-6	6	57	1570	"73,1"	M	"2,1"	3
+20/2431	1	"Torsk, filet 7"	Cod muscle	1	Midtmeie	NR-2020-08423	7	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-022	"-18,87607689"	"17,041647813"	"48,022845291"	"14,839240408"	"3,2362064343"	"4,410868455"			Torsk	Muskel	Torskefilet-7	7	38	560	14	M	"1,2"	2
+20/2432	1	"Torsk, filet 8"	Cod muscle	3	Midtmeie	NR-2020-08424	8	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-023	"-17,90266878"	"16,39347749"	"47,601926078"	"15,007975187"	"3,1717753718"	"4,240297318"			Torsk	Muskel	Torskefilet-8	8	45	860	"19,7"	F	"1,6"	2
+20/2433	1	"Torsk, filet 9"	Cod muscle	3	Midtmeie	NR-2020-08425	9	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-024	"-17,79530453"	"16,563246117"	"46,29884224"	"15,020567185"	"3,0823631138"	"4,284973272"			Torsk	Muskel	Torskefilet-19	19	"46,5"	1220	52	F		
+20/2434	1	"Torsk, filet 10"	Cod muscle	2	Midtmeie	NR-2020-08426	10	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-025	"-18,15395607"	"16,31491036"	"46,36901223"	"14,696572414"	"3,1550902431"	"4,219621757"			Torsk	Muskel	Torskefilet-26	26	44	990	41	F		
+20/2435	1	"Torsk, filet 11"	Cod muscle	1	Midtmeie	NR-2020-08427	11	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-026	"-18,66159871"	"13,149945346"	"45,286020818"	"14,754973866"	"3,0692037296"	"3,386736227"			Torsk	Muskel	Torskefilet-11	11	35	400	"3,1"	M	1	1
+20/2436	1	"Torsk, filet 12"	Cod muscle	2	Midtmeie	NR-2020-08428	12	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-027	"-18,81999426"	"17,013141709"	"47,248901903"	"13,741862945"	"3,438318523"	"4,403366849"			Torsk	Muskel	Torskefilet-12	12	43	740	"7,8"	M	1	2
+20/2437	1	"Torsk, filet 13"	Cod muscle	3	Midtmeie	NR-2020-08429	13	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-028	"-18,7989021"	"15,936770526"	"48,350022671"	"15,153860348"	"3,1906076446"	"4,120111274"			Torsk	Muskel	Torskefilet-13	13	47	940	32	M	"1,1"	2
+20/2438	1	"Torsk, filet 14"	Cod muscle	3	Midtmeie	NR-2020-08430	14	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-029	"-18,61658417"	"15,857069954"	"46,239372932"	"13,776529792"	"3,3563875396"	"4,099137439"			Torsk	Muskel	Torskefilet-14	14	60	2290	160	M	9	5
+20/2439	1	"Torsk, filet 15"	Cod muscle	2	Midtmeie	NR-2020-08431	15	Biota		Torsk	Cod	muscle	Torsk	Muskel	2020-114-030	"-17,6858995"	"16,151492342"	"46,647341297"	"15,168362853"	"3,0753049456"	"4,176617015"			Torsk	Muskel	Torskefilet-15	15	44	730	"17,8"	F	"4,9"	3
+20/1715	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08471	JNA17	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-031	"-26,24904455"	"8,6531386399"	"58,933015934"	"7,6260652317"	"7,7278405237"	"2,571787094"												
+20/1716	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08472	JNA26	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-032	"-24,15605657"	"11,024216504"	"55,203023873"	"8,8437272513"	"6,2420540914"	"3,195754953"												
+20/1717	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08473	JNA27	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-033	"-26,88911424"	"9,1841538927"	"59,137051914"	"7,9194270301"	"7,4673397064"	"2,71152795"												
+20/1718	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08474	JNA29	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-034	"-27,21031304"	"7,6157610416"	"56,496873928"	"9,1682913409"	"6,162203166"	"2,298792989"												
+20/1719	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08475	JNA36	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-035	"-27,36800232"	"7,7145945341"	"58,352604486"	"7,8641868609"	"7,4200429769"	"2,324801803"												
+20/1720	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08476	J8194	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-036	"-27,08030486"	"7,7830951082"	"57,67968976"	"7,9987786583"	"7,2110621163"	"2,34282827"												
+20/1721	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08477	JJX36	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-037	"-27,41673467"	"7,6481838614"	"57,39649356"	"8,7527378238"	"6,5575474458"	"2,30732531"												
+20/1722	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08478	JNA38	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-038	"-26,90772663"	"8,9743583166"	"58,936982675"	"7,7040423682"	"7,6501374029"	"2,656318588"												
+20/1723	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08479	JNA39	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-039	"-25,73897513"	"10,444722378"	"60,007260987"	"7,28571818"	"8,2362863213"	"3,043256499"												
+20/1724	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08481	JNA34	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-040	"-26,56718814"	"9,0652628868"	"56,901009448"	"8,9014370533"	"6,3923396984"	"2,680240843"												
+20/1725	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08482	JNA23	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-041	"-26,71963991"	"8,6587780112"	"55,95476194"	"9,5920650824"	"5,8334426903"	"2,573271139"												
+20/1726	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08483	JNA18	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-042	"-24,36035452"	"12,453001277"	"58,475452848"	"7,909905719"	"7,3926864524"	"3,571750946"												
+20/1727	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08484	JNA19	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-043	"-26,93802137"	"8,4466161397"	"57,244131087"	"8,5960845399"	"6,6593262109"	"2,517439067"												
+20/1728	1	Gråmåke egg	Herring gull egg		Skjærholmene	NR-2020-08485	JNA21	Biota		Gråmåke	Herring gull	egg	Gråmåke	Egg	2020-114-044	"-27,54929289"	"8,9140358859"	"59,878176241"	"7,2259658869"	"8,2865290506"	"2,640444264"												
+20/1729	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08486	JNA17	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-045	"-23,66368508"	"8,5104416947"	"48,508128079"	"12,923883015"	"3,7533710282"	"2,534235266"												
+20/1730	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08487	JNA26	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-046	"-24,17112405"	"9,0833590827"	"55,089162562"	"12,359716615"	"4,4571541788"	"2,685003"												
+20/1731	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08488	JNA27	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-047	"-25,17261392"	"7,7701988532"	"55,334913014"	"12,098647717"	"4,5736444526"	"2,339434518"												
+20/1732	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08489	JNA29	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-048	"-25,21416341"	"7,5573249967"	"51,464187952"	"13,497478531"	"3,8128742218"	"2,283415082"												
+20/1733	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08490	JNA36	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-049	"-24,7762134"	"7,7379237633"	"49,890124034"	"13,810096895"	"3,6125832001"	"2,330941074"												
+20/1734	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08491	J8194	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-050	"-24,57910901"	"7,2270920214"	"48,564831261"	"14,674393684"	"3,3094949139"	"2,196511668"												
+20/1735	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08492	JJX36	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-051	"-25,36769226"	"6,8698097632"	"49,133959136"	"14,523616817"	"3,383038795"	"2,102490021"												
+20/1736	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08493	JNA38	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-052	"-23,92688929"	"8,0388619315"	"49,411646966"	"14,917642628"	"3,3122959302"	"2,410135328"												
+20/1737	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08494	JNA39	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-053	"-23,78904745"	"8,5353975823"	"49,61262846"	"14,458399764"	"3,4314052226"	"2,540802605"												
+20/1738	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08495	JNA37	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-054	"-23,97135956"	"7,798375498"	"49,549433216"	"14,626854182"	"3,3875659523"	"2,346849425"												
+20/1739	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08496	JNA34	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-055	"-23,59064127"	"9,5470178167"	"49,508845933"	"14,873277915"	"3,3287111433"	"2,807018456"												
+20/1740	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08497	JNA23	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-056	"-25,21679101"	"8,465941162"	"49,452316518"	"14,805377794"	"3,3401590425"	"2,5225246"												
+20/1741	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08498	JNA18	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-057	"-22,55534043"	"10,835668896"	"52,988819876"	"12,84007289"	"4,1268317033"	"3,146137161"												
+20/1742	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08499	JNA19	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-058	"-24,36123883"	"7,6266872588"	"50,191041781"	"14,766176468"	"3,3990547174"	"2,301668309"												
+20/1743	1	Gråmåke blod	Herring gull blood		Skjærholmene	NR-2020-08500	JNA21	Biota		Gråmåke	Herring gull	blood	Gråmåke	Blod	2020-114-059	"-24,5171374"	"7,8522750274"	"49,265385322"	"14,685781737"	"3,3546314526"	"2,361033512"												
+20/2073		Blåskjell	Blue mussel		Steilene	NR-2020-08501		Biota		Blåskjell	Blue mussel	Whole body	Blåskjell	Bløtvev	2020-114-001	"-17,89531142"	"7,5746662757"	"35,920500789"	"6,9723270028"	"5,1518669125"	"1,919557524"												
+20/2074		Blåskjell	Blue mussel		Steilene	NR-2020-08502		Biota		Blåskjell	Blue mussel	Whole body	Blåskjell	Bløtvev	2020-114-002	"-18,59899943"	"8,064821451"	"43,356825237"	"9,4087430438"	"4,6081421328"	"2,048545728"												
+20/2075		Blåskjell	Blue mussel		Steilene	NR-2020-08503		Biota		Blåskjell	Blue mussel	Whole body	Blåskjell	Bløtvev	2020-114-003	"-18,51174433"	"8,0015553239"	"43,350980839"	"9,3994157929"	"4,6120931124"	"2,031896747"												
+20/2076		Reker	Shrimp		Midtmeie	NR-2020-08504		Biota		Reker	Prawn	Whole body	Reke	Halemuskel	2020-114-004	"-17,89045716"	"14,183283538"	"45,269679232"	"14,165936064"	"3,1956715763"	"3,65866733"												
+20/2077		Reker	Shrimp		Midtmeie	NR-2020-08505		Biota		Reker	Prawn	Whole body	Reke	Halemuskel	2020-114-005	"-17,83208294"	"13,474521644"	"45,170566889"	"14,19461929"	"3,1822316588"	"3,472151042"												
+20/2078		Reker	Shrimp		Midtmeie	NR-2020-08506		Biota		Reker	Prawn	Whole body	Reke	Halemuskel	2020-114-006	"-17,9577621"	"13,761620351"	"44,561432217"	"13,967109458"	"3,1904548575"	"3,547703333"												
+20/2079		Krill	Krill		Midtmeie	NR-2020-08507		Biota		Krill	Krill	Whole body	Krill	Hel	2020-114-007	"-20,1008504"	"11,518669506"	"41,339995653"	"11,046829708"	"3,7422497446"	"2,957453111"												
+20/2080		Krill	Krill		Midtmeie	NR-2020-08508		Biota		Krill	Krill	Whole body	Krill	Hel	2020-114-008	"-20,16583383"	"11,709248031"	"41,85981703"	"11,136770029"	"3,7587035489"	"3,007605355"												
+20/2081		Krill	Krill		Midtmeie	NR-2020-08509		Biota		Krill	Krill	Whole body	Krill	Hel	2020-114-009	"-20,2912117"	"12,037171696"	"42,274463876"	"11,085019655"	"3,813657097"	"3,093901056"												
+20/2082		Børstemark	Polychaete		Cm 21	NR-2020-08510		Biota		Børstemark	Polychaete	Whole body	Børstemark	Hel	2020-114-010	"-18,46855377"	"11,475043382"	"25,049456737"	"6,8806622512"	"3,6405589785"	"2,945972552"												
+20/2083		Børstemark	Polychaete		Cm 21	NR-2020-08511		Biota		Børstemark	Polychaete	Whole body	Børstemark	Hel	2020-114-011	"-19,40792544"	"11,929362051"	"42,177550686"	"11,324769383"	"3,7243628776"	"3,065530097"												
+20/2084		Børstemark	Polychaete		Cm 21	NR-2020-08512		Biota		Børstemark	Polychaete	Whole body	Børstemark	Hel	2020-114-012	"-19,00248288"	"12,396674413"	"32,046270232"	"7,9548557912"	"4,0285168045"	"3,188507034"												
+20/2085		Sild	Herring		Midtmeie	NR-2020-08513		Biota		Sild	Herring	muscle	Sild	Filet (muskel)	2020-114-013	"-21,62219579"	"13,47685754"	"56,017235752"	"10,18120552"	"5,5020238659"	"3,472765752"												
+20/2086		Sild	Herring		Midtmeie	NR-2020-08514		Biota		Sild	Herring	muscle	Sild	Filet (muskel)	2020-114-014	"-20,20839826"	"12,730912289"	"48,63688508"	"12,19512779"	"3,9882226671"	"3,27646437"												
+20/2087		Sild	Herring		Midtmeie	NR-2020-08515		Biota		Sild	Herring	muscle	Sild	Filet (muskel)	2020-114-015	"-21,40665678"	"13,728859485"	"52,550322973"	"11,252016484"	"4,6703027006"	"3,539082053"												
+20/1405	1	Renseanl. Vann	Water WWTP		Bekkelaget	NR-2020-08171		Abiotic	Water WWTP																								
+20/1406	1	Renseanl. Vann	Water WWTP		Bekkelaget	NR-2020-08172		Abiotic	Water WWTP																								
+20/1407	1	Renseanl. Slam	Sludge		Bekkelaget	NR-2020-08173		Abiotic	Sludge WWTP																								
+20/1408	1	Renseanl. Slam	Sludge		Bekkelaget	NR-2020-08174		Abiotic	Sludge WWTP																								
+20/2072	1	Sediment	Sediment		Cm 21	NR-2020-08522		Abiotic	Sediment																								
+20/2454	1	Stormwater	Stormwater		Alna 125 X	NR-2020-08614		Stormwater	Stormwater	Stormwater		Stormwater																					
+20/2455	1	Partikler	Particles		Alna 125 X	NR-2020-08615		Abiotic	Particles																								
+20/2456	1	Stormwater	Stormwater		Alna 136 X	NR-2020-08616		Stormwater	Stormwater	Stormwater		Stormwater																					
+20/2457	1	Partikler	Particles		Alna 136 X	NR-2020-08617		Abiotic	Particles																								
+		"Torsk, blandprøve"	Cod mixed sample			BL1		Biota		Torsk	Cod	blandprøve	Torsk								"3,9183046357"												
+		"Torsk, blandprøve"	Cod mixed sample			BL2		Biota		Torsk	Cod	blandprøve	Torsk								"4,2126268007"												
+		"Torsk, blandprøve"	Cod mixed sample			BL3		Biota		Torsk	Cod	blandprøve	Torsk								"4,1619380749"												
