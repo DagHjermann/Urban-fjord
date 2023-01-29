@@ -416,3 +416,33 @@ get_biota_chemistry_station <- function(station_code, myear){
     select(STATION_CODE, DATE_CAUGHT, LATIN_NAME, SPECIMEN_NO, TISSUE_NAME, PARAM, VALUE, FLAG1, UNIT, 
            STATION_ID, SPECIMEN_ID, TAXONOMY_CODE_ID, SAMPLE_ID, TISSUE_ID, METHOD_ID, LABORATORY)
 }
+
+
+#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
+#
+# Functions for testing ----
+#
+#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
+
+
+# Checks if there are any NAs in 'variablename' of 'data'
+# If there are any NAs:
+#    error = TRUE, stops with an error
+#    error = FALSE, gives waening and returns the rows with NA values  
+
+check_na <- function(data, variablename, error = TRUE){
+  sel <- is.na(data[[variablename]])
+  df_with_na <- data[sel,]
+  if (nrow(df_with_na) > 0){
+    if (error){
+      stop("Some rows lack ", variablename)
+    } else {
+      warning("Some rows lack ", variablename)
+      result <- df_with_na
+    }
+  } else {
+    result <- NULL
+  }
+  invisible(result)
+}
+
