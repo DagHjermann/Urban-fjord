@@ -1,0 +1,165 @@
+---
+title: "0421_Milfersk_2021"
+format: html
+---
+
+
+
+## 1. Setup  
+
+### Functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(knitr)     # for kable
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+
+## 2.  Check existing NIVAbasen data    
+
+```{r}
+
+df_projects <- get_projects()   
+
+# df_stations <- get_stations_from_project("MILFERSK", exact = FALSE)
+df_stations <- get_stations_from_project("MILFERSK 2021-2025", exact = TRUE)
+
+nrow(df_stations)
+
+```
+
+#### Get all data   
+
+```{r}
+
+# Code from script 0010  
+
+# 
+## Biota samples
+#
+
+df_specimens <- get_specimens_from_stationdata(df_stations, years = 2021)
+message("No. of specimens, biota: ", nrow(df_specimens))
+dat_nb_biota <- get_biota_chemistry(2021, df_specimens, df_stations, report_samples = TRUE)
+
+dat_nb_biota <- dat_nb_biota %>%
+  mutate(Year = year(SAMPLE_DATE))
+
+# 421  
+
+#
+## Water samples  
+#
+
+df_samples_water <- get_nivabase_selection(
+  "*",
+  "WATER_SAMPLES",
+  "STATION_ID",
+  df_stations$STATION_ID
+)
+message("No. of samples, water: ", nrow(df_samples_water))
+
+# Adds "SAMPLE_TYPE", "SAMPLE_NUMBER", "DESCRIPTION" and "n_labware" from Labware
+
+# debugonce(get_water_chemistry_from_stations)
+dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), 2017:2021)
+
+
+df_samples_sediment <- get_nivabase_selection(
+  "*",
+  "SEDIMENT_SAMPLES",
+  "STATION_ID",
+  df_stations$STATION_ID
+)
+message("No. of samples, sediment: ", nrow(df_samples_sediment))
+
+dat_nb_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, years = 2017:2021)
+
+dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sediment$METHOD_ID))
+
+dat_nb_sediment <- dat_nb_sediment %>%
+  left_join(dat_nb_sediment_methods, by = "METHOD_ID") %>%
+  mutate(Year = year(SAMPLE_DATE)) 
+
+
+```
+
+
+
+#### Number of parameters, biota   
+```{r}
+
+dat_nb_biota %>%
+  distinct(LATIN_NAME, STATION_NAME, NAME, Year) %>%
+  xtabs(~STATION_NAME + Year + LATIN_NAME, .)  
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_nb_biota)
+
+```
+
+
+#### Parameters  
+
+* PFAS + Uv + a few extra  
+* No 'particle parameters' (end) 
+
+```{r}
+
+dat_nb_biota %>%
+  xtabs(~NAME + Year, .) %>% head(10)  
+
+```
+
+
+#### Number of parameters, water    
+```{r}
+
+dat_nb_water %>%
+  distinct(STATION_NAME, NAME, Year = year(SAMPLE_DATE)) %>%
+  xtabs(~addNA(STATION_NAME) + Year, .)    
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_nb_water)
+
+```
+
+
+#### Number of parameters, sediment    
+```{r}
+
+dat_nb_sediment %>%
+  distinct(STATION_NAME, NAME, Year = year(SAMPLE_DATE)) %>%
+  xtabs(~addNA(STATION_NAME) + Year, .)    
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_nb_sediment)
+
+```
+
+## 3. Save  
+
+```{r}
+
+saveRDS(dat_nb_biota, paste0("421_dat_nb_biota_", today(), ".rds"))
+saveRDS(dat_nb_water, paste0("421_dat_nb_water_", today(), ".rds"))
+saveRDS(dat_nb_sediment, paste0("421_dat_nb_sediment_", today(), ".rds"))
+
+```
+
+

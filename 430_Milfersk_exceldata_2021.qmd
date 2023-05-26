@@ -1,0 +1,327 @@
+---
+title: "430_Milfersk_exceldata_2021"
+format: html
+---
+
+## 1. Setup  
+
+### Functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(knitr)     # for kable
+library(fuzzyjoin)   # regex_full_join
+
+# source("../Milkys/991_Vannmiljo_snippets_functions.R")
+# source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+# source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+## 2. Read data  
+
+### Read from excel  
+
+```{r}
+
+dat_raw1 <- read_excel("Milfersk/All_results MILFERSK2021_edit.xlsx", col_types = "text", col_names = FALSE) %>%
+  as.data.frame(dat_raw1)
+
+dat_raw2 <- dat_raw1[-(1:4), ]
+ncol(dat_raw2)
+
+cols1 <- c("Pargroup", "Name1", "Name2")
+cols2 <- as.character(dat_raw1[4, -(1:3)])
+names(dat_raw2) <- c(cols1, cols2)
+
+# dat_raw2
+
+```
+
+### Remove rows giving unit   
+
+* Makes dat_wide  
+
+```{r}
+
+first_char <- substr(dat_raw2[,4], 1, 1)
+table(addNA(first_char))
+
+# Minus = less-thans
+# dat_raw2[first_char == "-", 4]
+
+# 
+dat_raw2[first_char %in% c("n","N"), 4]
+
+unit_rows <- first_char %in% c("µ", "n","N")
+dat_unit <- dat_raw2[unit_rows,]  
+
+dat_wide <- dat_raw2[-unit_rows,]
+
+```
+
+
+### Pivot data to long format     
+
+```{r}
+
+dat_1 <- dat_wide %>%
+  # select(-Pargroup) %>%
+  pivot_longer(cols = c(-Pargroup, -Name1, -Name2), names_to = "Provenr", values_to = "Value_char") %>%
+  mutate(
+    Value = sub("<", "", Value_char),
+    Value = sub("-", "", Value_char),
+    Value = sub("[:space:]+", "", Value),
+    Value = as.numeric(Value),
+    FLAG1 = case_when(
+      grepl("<", Value_char) ~ "<",
+      grepl("^\\-", Value_char) ~ "<",
+      TRUE ~ as.character(NA))
+  )
+
+```
+
+### Names lacking   
+```{r}
+
+xtabs(~is.na(Name1) + is.na(Name2), dat_1)
+
+dat_1 %>%
+  filter(is.na(Name1) & is.na(Name2) & !is.na(Value)) 
+# all are Pargroup = "PCB", meaning a sum for a group of PCBs
+
+dat_2 <- dat_1 %>%
+  filter(!(is.na(Name1) & is.na(Name2))) 
+
+```
+
+### Names 1 and 2  
+
+* Create 'Name'  
+
+```{r}
+
+dat_2 %>%
+  filter(!is.na(Name1) & is.na(Name2)) %>% xtabs(~Name1, .) 
+
+# dat_2 %>%
+#   filter(is.na(Name1) & !is.na(Name2)) %>% xtabs(~Name2, .)
+
+dat_2 %>%
+  filter(!is.na(Name1) & !is.na(Name2)) %>% 
+  count(Name1, Name2)
+
+dat_2 <- dat_2 %>%
+  mutate(
+    Name = case_when(
+      !is.na(Name1) & is.na(Name2) ~ Name1,
+      TRUE ~ Name2),
+  )
+
+elements <- c("Ag", "As", "Cd", "Cr", "Cu", "Fe", 
+              "Hg", "Ni", "Pb", "Sb", "Zn")
+
+dat_2 <- dat_2 %>%
+  mutate(
+    Name = case_when(
+      Name %in% elements ~ toupper(Name),
+      TRUE ~ Name),
+    Name = sub("PCB ", "PCB-", Name, fixed = TRUE)
+  )
+
+
+table(is.na(dat_2$Name))
+# table(dat_2$Name)
+
+```
+
+
+## Match parameter names  
+
+### Names  
+
+```{r}
+
+dat_names <- dat_2 %>%
+  count(Name1, Name) 
+
+# Get 'elements' (for code above)
+# dat_names %>%
+#   filter(nchar(Name) == 2) %>% pull(Name) %>% dput()
+
+```
+
+### Standard names  
+
+```{r}
+
+df_names_biota <- readRDS("Data/0110_df_names_biota.rds")  
+
+df_names_in_nb <- readRDS("421_dat_nb_biota_2023-05-16.rds") %>%
+  distinct(NAME, METHOD_ID_nb = METHOD_ID)
+
+```
+
+
+### Function for picking methods by unit   
+```{r}
+
+# Pick method by a prioritised list of units  
+pick_method_by_unit <- function(data_method, units){
+  result <- data_method
+  for (unit in units){
+    result <- result %>%
+      group_by(NAME) %>%
+      mutate(unit_available = sum(UNIT == unit) > 0) %>%
+      filter(UNIT == unit | (!unit_available)) 
+  }
+  result %>% 
+    select(-unit_available) %>%
+    arrange(NAME) %>%
+    add_count(NAME)
+}
+
+```
+
+### Biota: Get METHOD_IDs based on formerly used names   
+
+* Note: METHOD_IDs for biota only  
+
+```{r}
+
+# help(package = "fuzzyjoin")
+# https://github.com/dgrtwo/fuzzyjoin
+
+dat_names_biota_1 <- dat_names %>%
+  left_join(df_names_biota %>% select(NAME_modified, METHOD_ID), # %>% rename(METHOD_ID_1 = METHOD_ID), 
+            by = c("Name" = "NAME_modified")) %>%
+  left_join(df_names_in_nb, by = c("Name" = "NAME"))
+
+dat_names_biota_unmatched_1 <- dat_names_biota_1 %>%
+  filter(is.na(METHOD_ID), is.na(METHOD_ID_nb)) %>%
+  stringdist_left_join(df_names_biota %>% rename(METHOD_ID_1 = METHOD_ID), 
+                       by = c("Name" = "NAME_modified"), max_dist = 1)
+
+dat_names_biota_unmatched_1 <- dat_names_biota_unmatched_1 %>%
+  filter(is.na(METHOD_ID_1))
+
+```
+
+### Biota: missing names  
+
+```{r}
+
+names_missing1 <- dat_names_biota_unmatched_1$Name
+
+names_missing1 <- names_missing1[names_missing1 != "ΣPCB7"]   # this sum character messes up the SQL call (and R crashes) 
+names_missing1
+
+```
+
+### Biota: search for methods   
+
+```{r}
+
+df_def_biota1 <- get_nivabase_selection(
+  "*",
+  "METHOD_DEFINITIONS",
+  "NAME", names_missing1, values_are_text = TRUE, extra_sql = "and MATRIX = 'BIOTA'")
+
+nrow(df_def_biota1)
+
+# Use "accepted" list of units  
+df_def_biota2 <- df_def_biota1 %>%
+  pick_method_by_unit(units = c("µg/kg v.v.", "ng/g w.w.", "NG_P_G", "ng/g"))
+
+# nrow(df_def_biota1)
+nrow(df_def_biota2)
+
+# df_def_biota2 %>% filter(n > 1)
+
+df_def_biota <- df_def_biota2 %>%
+  filter(!METHOD_ID %in% c(33664, 33666))        # HARD-CODED
+
+table(df_def_biota$LABORATORY)
+
+```
+
+
+### Biota: add searched methods   
+
+```{r}
+
+dat_names_biota_2 <- dat_names_biota_1 %>%
+  left_join(df_def_biota %>% select(NAME, METHOD_ID_search = METHOD_ID),
+            by = c("Name" = "NAME")) %>%
+  mutate(
+    METHOD_ID_so_far = case_when(
+      !is.na(METHOD_ID) ~ METHOD_ID,
+      !is.na(METHOD_ID_nb) ~ METHOD_ID_nb,
+      !is.na(METHOD_ID_search) ~ METHOD_ID_search)
+  )
+
+dat_names_biota_unmatched_2 <- dat_names_biota_2 %>%
+  filter(is.na(METHOD_ID_so_far))
+
+```
+
+### Manual matching    
+
+#### Check for more names   
+
+```{r}
+
+options(useFancyQuotes = FALSE)
+
+
+txt <- dat_names_biota_unmatched_2$Name[1]
+txt2 <- paste0("%", txt, "%")
+sql <- paste("select * from NIVADATABASE.METHOD_DEFINITIONS where NAME like", sQuote(txt2))
+sql
+
+check <- get_nivabase_data(sql)
+
+```
+
+
+#### Save unmatched names  
+
+```{r}
+
+saveRDS(dat_names_biota_unmatched_2, "Data/430_dat_names_biota_unmatched_2.rds")
+
+```
+
+
+#### Get all Nivabase methods  
+```{r}
+
+if (FALSE){
+  df_methods_all <- get_nivabase_data("select * from NIVADATABASE.METHOD_DEFINITIONS")
+  saveRDS(df_methods_all, "Data/df_methods_all.rds")  
+}
+
+df_methods_all <- readRDS("Data/df_methods_all.rds")  
+
+
+```
+
+#### Manually matched names 
+
+```{r}
+
+
+
+```
+
+
+

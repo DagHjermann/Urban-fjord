@@ -1,0 +1,645 @@
+---
+title: "0010_Check_Vannmiljø"
+author: "DHJ"
+date: "2022-11-11"
+output: html_document
+---
+
+
+## 1. Setup  
+
+### Functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(knitr)     # for kable
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+## 2.  Check Vannmiljø export    
+
+In https://vannmiljo.miljodirektoratet.no/
+"Jeg vil" => Søk i vannregistreringer og lokaliteter
+Select records: 
+  in menu "Forvaltningsaktivitet": select "Miljøgifter i en urban fjord"
+  in menu "Prøvedato": select from 01/01/2016 to 31/12/2021
+
+```{r}
+
+dat_vm1 <- read_excel("Input_data/Vannmiljøexport_Urbanfjord_9Nov2022/VannmiljoEksport_9Nov2022.xlsx", guess_max = 10000)
+
+dat_vm1 <- dat_vm1 %>%
+  mutate(
+    Time = ymd_hms(Tid_provetak)
+  )
+
+table(year(dat_vm1$Time))
+
+```
+        
+```{r}
+
+dat_vm2 <- read_excel("Input_data/Vannmiljøexport_Urbanfjord_9Mai2023/VannmiljoEksport_9Mai2023_2021.xlsx", guess_max = 10000)
+
+dat_vm2 <- dat_vm2 %>%
+  mutate(
+    Time = ymd_hms(Tid_provetak)
+  )
+
+table(year(dat_vm2$Time))
+
+```
+
+#### Choose which data to look at    
+```{r}
+
+dat_vm <- dat_vm2
+
+```
+
+
+#### Number of parameters per matrix   
+```{r}
+
+dat_vm %>%
+  count(Medium_navn, Parameter_navn, Year = year(Time)) %>%
+  xtabs(~Medium_navn + Year, .)
+
+```
+
+#### Parameters  
+
+```{r}
+
+check1 <- dat_vm %>%
+    xtabs(~Parameter_id + Medium_navn, .)
+# check2 <- dat_vm %>%
+#     xtabs(~Parameter_navn + Medium_navn, .)
+
+head(check1) %>% kable(format = "simple")
+
+```
+
+
+
+#### Matrices    
+```{r}
+
+# xtabs(~Parameter_navn + year(Time), dat_vm)
+# xtabs(~Parameter_id + year(Time), dat_vm)
+# xtabs(~Parameter_id + Medium_navn, dat_vm)
+xtabs(~Medium_navn, dat_vm)
+
+```
+
+#### Compare with legal Vannmiljø parameters  
+```{r}
+
+df_pars_existing <- read_excel("Input_data/Vannmiljøexport_Urbanfjord_9Nov2022/Vannmiljø_parametre_2023-01-19.xlsx")
+
+table(df_pars_existing$QualityElementName)
+
+df_pars <- dat_vm %>%
+  count(Parameter_navn, Parameter_id, Year = year(Time)) %>%
+  left_join(
+    df_pars_existing %>% select(ParameterID, QualityElementName, SubGroupID, SubGroupName),
+    by = c("Parameter_id" = "ParameterID")
+  )
+
+xtabs(~SubGroupName + Year, df_pars)
+
+
+
+# "Plastpartikler" has only 10 parameters, and only one is weight-based  
+# PLMICROWG	
+# Mengde mikroplast per prøve	Vektbasert konsentrasjon av mikroplast med partikkelstørrelse < 1 mm i en enkeltprøve eller som et gjennomsnitt av flere prøver på en gitt lokalitet.		PLP	Plastpartikler
+
+
+
+```
+
+#### Add number of sediment records  
+
+```{r}
+
+df_pars_sed_submitted <- dat_vm %>%
+  filter(Medium_navn %in% c("Kloakkslam", "Sediment saltvann", "Regnvann", "Ferskvann", "Avløpsvann renset")) %>%
+  count(Parameter_id, name = "Submitted")
+
+df_pars_existing <- df_pars_existing %>%
+  left_join(
+    df_pars_sed_submitted, 
+    by = c("ParameterID" = "Parameter_id")
+  ) %>%
+  mutate(Levert_i_vannmiljø = (!(is.na(Submitted))))
+
+# xtabs(~QualityElementName + Levert_i_vannmiljø, df_pars_existing)
+
+tab <- xtabs(~SubGroupName       + Levert_i_vannmiljø, df_pars_existing)
+row.names(tab)
+
+tab
+
+```
+
+### Check quality check data from AqM export  
+```{r}
+
+fn <- "Input_data/Vannmiljøexport_Urbanfjord_9Nov2022/hq49exo kvalsjekk 19.01.2023.xlsm"
+excel_sheets(fn)
+
+df_qc <- read_excel(fn, sheet = "REG")
+
+df_pars_sed_qc <- df_qc %>%
+  count(Parameter_id, name = "QC")
+
+df_pars_existing <- df_pars_existing %>%
+  left_join(
+    df_pars_sed_qc, 
+    by = c("ParameterID" = "Parameter_id")
+  ) %>%
+  mutate(I_Nivabase = (!(is.na(Submitted))))
+
+tab2 <- xtabs(~SubGroupName + I_Nivabase, df_pars_existing)
+# row.names(tab2)
+
+tab2
+
+```
+
+#### For Dag Rosland   
+
+* This was used before we did the particle 
+
+```{r}
+
+df_pars <- dat_vm %>%
+  count(Parameter_navn, Parameter_id, Year = year(Time)) %>%
+  left_join(
+    df_pars_existing %>% select(ParameterID, QualityElementName, SubGroupID, SubGroupName),
+    by = c("Parameter_id" = "ParameterID")
+  )
+
+df_to_dagr <- df_pars_sed_qc %>%
+  distinct(Parameter_id) %>%
+  left_join(
+    df_pars_existing %>% select(QualityElementName, SubGroupID, SubGroupName, ParameterID, Name),
+    by = c("Parameter_id" = "ParameterID")
+  ) %>%
+  arrange(QualityElementName, SubGroupID, SubGroupName, Parameter_id)
+
+# Uncomment to save to file
+# write.csv(df_to_dagr, "Input_data/Vannmiljøexport_Urbanfjord_9Nov2022/VM_parameters.csv", row.names = FALSE)
+# writexl::write_xlsx(df_to_dagr, "Input_data/Vannmiljøexport_Urbanfjord_9Nov2022/VM_parameters.xlsx")
+
+```
+
+### Check Alna station 125x  
+```{r}
+
+table(dat_vm$Vannlokalitet)
+table(dat_vm$Medium_navn)
+table(dat_vm$Filtrert_Prove)
+
+dat_vm %>%
+  filter(Vannlokalitet == "Alna (ALN 125x)") %>%
+  xtabs(~Medium_navn + year(Time) + Filtrert_Prove, .)   
+
+yr <- 2019
+dat_vm %>%
+  filter(Vannlokalitet == "Alna (ALN 125x)" & year(Time) == yr) %>%
+  arrange(Parameter_id, Filtrert_Prove) %>%
+  select(Vannlokalitet, Time, Parameter_id, Parameter_navn, Medium_navn, 
+         Filtrert_Prove, Operator, Verdi, Enhet, Provenr) %>%
+  filter(Parameter_id == "PFOS")                      #     %>% View(paste("125x", yr))
+  
+  
+dat_vm %>%
+  filter(Vannlokalitet == "Alna (ALN 125x)" & year(Time) == 2018) %>%
+  arrange(Parameter_id, Filtrert_Prove) %>%
+  select(Vannlokalitet, Time, Parameter_id, Parameter_navn, Medium_navn, 
+         Filtrert_Prove, Operator, Verdi, Enhet, Provenr) %>%
+  filter(Parameter_id == "PFOS")                        #    %>% View("125x 2018")
+
+
+```
+
+
+## 3.  Check existing NIVAbasen data    
+
+```{r}
+
+# From further down  
+#   PROJECT_ID PROJECT_NAME          PROJECT_DESCRIPTION  STARTDATE    ENDDATE ENTERED_BY        ENTERED_DATE           O_NUMBER
+# 1       8551  Urban fjord Miljøgifter i en urban fjord 2013-01-01 2020-12-31        WEB 2015-11-04 15:33:30 13239,17146,210135
+
+df_projects <- get_projects()   
+df_stations <- get_stations_from_project("Urban fjord", ignore.case = FALSE)
+nrow(df_stations)
+
+```
+
+#### Get all data  
+
+```{r}
+
+# 
+## Biota samples
+#
+
+df_specimens <- get_specimens_from_stationdata(df_stations, years = 2017:2021)
+message("No. of specimens, biota: ", nrow(df_specimens))
+dat_nb_biota <- get_biota_chemistry(2017:2021, df_specimens, df_stations, report_samples = TRUE)
+
+#
+## Water samples  
+#
+
+df_samples_water <- get_nivabase_selection(
+  "*",
+  "WATER_SAMPLES",
+  "STATION_ID",
+  df_stations$STATION_ID
+)
+message("No. of samples, water: ", nrow(df_samples_water))
+
+# Adds "SAMPLE_TYPE", "SAMPLE_NUMBER", "DESCRIPTION" and "n_labware" from Labware
+
+# debugonce(get_water_chemistry_from_stations)
+dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), 2017:2021)
+
+
+df_samples_sediment <- get_nivabase_selection(
+  "*",
+  "SEDIMENT_SAMPLES",
+  "STATION_ID",
+  df_stations$STATION_ID
+)
+message("No. of samples, sediment: ", nrow(df_samples_sediment))
+
+dat_nb_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, years = 2017:2021)
+
+dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sediment$METHOD_ID))
+
+dat_nb_sediment <- dat_nb_sediment %>%
+  left_join(dat_nb_sediment_methods, by = "METHOD_ID") %>%
+  mutate(Year = year(SAMPLE_DATE))
+
+```
+
+#### Water samples - handle particle + water fraction   
+
+- Some extra treatment needed water samples   
+    - Each physical water sample is filtered and each compound is then measured in both the particles left on the filter and in the filtered water (i.e. two subsamples of the water sample)        
+    - Particle fraction is given by adding '-P' to the end of NAME   
+    - Also make parameter name PARAM by removing '-P' where itoccurs  
+
+```{r}
+
+dat_nb_water <- dat_nb_water %>%
+  mutate(
+    PARAM = case_when(
+      grepl("\\-P$", NAME) ~ sub("\\-P$", "", NAME),
+      TRUE ~ NAME),
+    Fraction = case_when(
+      grepl("\\-P$", NAME) ~ "Particle fraction",
+      TRUE ~ "Water fraction"))
+
+```
+
+#### Number of parameters, biota   
+```{r}
+
+dat_nb_biota %>%
+  distinct(LATIN_NAME, NAME, Year = year(SAMPLE_DATE)) %>%
+  xtabs(~LATIN_NAME + Year, .)  
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_nb_biota)
+
+```
+
+
+
+#### Number of parameters, water   
+
+- taking into account water fraction + filtered fraction   
+- Usig PARAM for parameter name (derived from NAME; particle fraction when NAME ends in '-P'  
+
+```{r}
+
+dat_nb_water %>%
+  distinct(STATION_NAME, PARAM, Fraction, Year) %>%  
+  xtabs(~addNA(STATION_NAME) + Year + Fraction, .)    
+
+# List all parameters by year  
+# xtabs(~PARAM + year(SAMPLE_DATE), dat_nb_water)
+
+
+
+```
+
+
+#### Number of parameters, sediment    
+```{r}
+
+dat_nb_sediment %>%
+  distinct(STATION_NAME, NAME, Year = year(SAMPLE_DATE)) %>%
+  xtabs(~addNA(STATION_NAME) + Year, .)    
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_nb_sediment)
+
+```
+
+#### Parameters in biota but not water + sediment   
+
+Lacking bisphenols etc.  
+```{r}
+
+check_2021 <- dat_nb_biota %>%
+  filter(year(SAMPLE_DATE) == 2021) %>%
+  distinct(NAME, STATION_NAME) %>%
+  count(NAME, name = "stations_bio") %>%
+  left_join(dat_nb_water %>%
+              distinct(NAME, STATION_NAME) %>%
+              count(NAME, name = "stations_wat"), by = "NAME") %>%
+  left_join(dat_nb_sediment %>%
+              distinct(NAME, STATION_NAME) %>%
+              count(NAME, name = "stations_sed"), by = "NAME")
+
+check_2021 %>%
+  filter(is.na(stations_wat))
+
+```
+
+## 4. Compare with excel data  
+
+### Lookup table for names  
+```{r}
+
+# NAME_orig -> NAME_modified -> METHOD_ID
+lookup_nb_biota1 <- readRDS("Data/0110_df_names_biota.rds")
+
+# NAME -> METHOD_ID
+# 
+lookup_nb_biota2 <- read_excel("Data/0010_lookup_nb_biota_2022.xlsx")
+
+lookup_nb_biota <- lookup_nb_biota1 %>%
+  full_join(
+    lookup_nb_biota2 %>% select(NAME, METHOD_ID),
+    by = c("NAME_modified" = "NAME")
+  )
+
+check <- lookup_nb_biota %>%
+  filter(METHOD_ID.x != METHOD_ID.y)
+
+if (nrow(check) > 0){
+  stop("METHOD_ID differs for the two files")
+} else {
+  lookup_nb_biota <- lookup_nb_biota %>%
+    mutate(
+      METHOD_ID = case_when(
+        !is.na(METHOD_ID.x) ~ METHOD_ID.x,
+        !is.na(METHOD_ID.y) ~ METHOD_ID.y)
+    ) %>%
+    select(-METHOD_ID.x, -METHOD_ID.y)
+}
+
+```
+
+
+### 2021 biota    
+```{r}
+
+dat_excel_wide <- read_excel("Input_data/2021/UrbanFjord_2021_concentrations_NIVAandNILU.xlsx", skip = 2, col_types = "text")
+
+dat_excel <- dat_excel_wide %>%
+  select(`NILU-no.`, `NIVA-no.`, Compartment, `Compartment spec.`, `Lipid%`:`ATAC-C22`) %>%
+  # Keep only lines with sample numbers (for NILU or NIVA, or both):
+  filter(!is.na(`NILU-no.`) |!is.na(`NIVA-no.`)) %>%
+  pivot_longer(-c(`NILU-no.`, `NIVA-no.`, Compartment, `Compartment spec.`), names_to = "NAME_orig", values_to = "Conc") 
+
+n1 <- nrow(dat_excel)
+dat_excel <- dat_excel %>%
+  left_join(lookup_nb_biota %>% rename(METHOD_ID_1 = METHOD_ID), by = "NAME_orig") 
+n2 <- nrow(dat_excel)
+
+if (n2 > n1)
+  stop("Number of rows increased - lookup file has duplicates")
+
+sum(is.na(dat_excel$NAME_modified))
+sum(is.na(dat_excel$METHOD_ID_1))
+
+n1 <- nrow(dat_excel)
+dat_excel <- dat_excel %>%
+  left_join(lookup_nb_biota %>% select(NAME_modified, METHOD_ID) %>% rename(METHOD_ID_2 = METHOD_ID),
+            by = c("NAME_orig" = "NAME_modified"))
+n2 <- nrow(dat_excel)
+
+if (n2 > n1)
+  stop("Number of rows increased - lookup file has duplicates")
+
+sum(is.na(dat_excel$METHOD_ID_2))
+
+
+
+```
+
+### 2019 biota    
+```{r}
+
+dat_excel_wide <- read_excel("Input_data/2013-2019/ElectronicAppendix2019.xlsx", skip = 2, col_types = "text")
+
+dat_excel <- dat_excel_wide %>%
+  select(`NILU-no.`, `NIVA-no.`, Compartment, `Compartment spec.`, `Lipid%`:`ATAC-C22`) %>%
+  # Keep only lines with sample numbers (for NILU or NIVA, or both):
+  filter(!is.na(`NILU-no.`) |!is.na(`NIVA-no.`)) %>%
+  pivot_longer(-c(`NILU-no.`, `NIVA-no.`, Compartment, `Compartment spec.`), names_to = "NAME_orig_1", values_to = "Conc") 
+
+n1 <- nrow(dat_excel)
+dat_excel <- dat_excel %>%
+  mutate(
+    NAME_orig = case_when(
+      grepl("^BDE", NAME_orig_1) ~ sub("^BDE", "PBDE", NAME_orig_1),
+      TRUE ~ NAME_orig_1)
+  ) %>%
+  left_join(lookup_nb_biota1 %>% )
+n2 <- nrow(dat_excel)
+
+if (n2 > n1)
+  stop("Number of rows increased - lookup file has duplicates")
+
+sum(is.na(dat_excel$NAME_modified))
+
+
+```
+
+### Check all names in excel    
+
+```{r}
+
+dat_excel %>%
+  count(NAME_orig, NAME_modified)
+
+```
+
+### Make  preferred names for biota from Nivabasen    
+
+```{r}
+
+
+if (FALSE){
+  
+  #
+  # Make lookup file for biota methods, '0010_lookup_nb_biota_2022.xlsx'
+  # DO ONLY ONCE
+  #
+  
+  # Get all biota methods used 
+  lookup_nb_biota <- dat_nb_biota %>%
+    distinct(NAME, METHOD_ID) %>%
+    arrange(NAME)
+  
+  # Check those with duplicates for NAME...
+  
+  df_check <- lookup_nb_biota %>%
+    add_count(NAME) %>%
+    filter(n > 1)
+  
+  # ...and add them to 'lookup_nb_biota', creating 'lookup_nb_biota_methods'
+  # (i.e., the full set of columns wil only be added to the NAME with duplicates)
+  lookup_nb_biota_methods <- get_nivabase_selection(
+    "*", "METHOD_DEFINITIONS", "METHOD_ID", df_check$METHOD_ID
+  )
+  
+  lookup_nb_biota <- lookup_nb_biota %>%
+    left_join(lookup_nb_biota_methods %>% select(-NAME), by = "METHOD_ID")
+
+  # 
+  # writexl::write_xlsx(lookup_nb_biota, "Data/0010_lookup_nb_biota_2022_raw.xlsx")
+  #
+  # Manually modified and saved as '0010_lookup_nb_biota_2022.xlsx'
+  # - keep those with correct UNIT, for instance  
+
+}
+
+
+```
+
+```{r}
+
+dat_excel_missing <- dat_excel %>%
+  filter(is.na(NAME_modified)) %>%
+  count(NAME_orig_1, NAME_orig)
+
+nrow(dat_excel_missing)
+dat_excel_missing <- dat_excel_missing %>%
+  left_join(lookup_nb_biota, by = c("NAME_orig_1" = "NAME"))  
+nrow(dat_excel_missing)
+
+lookup_nb_biota %>%
+  filter(NAME )
+
+```
+
+```{r}
+
+table(addNA(dat_excel$Compartment))
+table(addNA(dat_excel$`Compartment spec.`))
+
+table(addNA(dat_excel$NAME_modified))  
+
+dat_excel %>%
+  count(NAME_orig, NAME_modified)
+
+```
+
+
+## 3.  Check existing Labware parameters      
+
+```{r}
+
+# creates a crash:
+# sql <- "select * from NIVADATABASE.LABWARE_CHECK_SAMPLE order by SAMPLE_DATE ASC limit 200"
+
+sql <- "select * from NIVADATABASE.LABWARE_CHECK_SAMPLE where rownum < 5"
+# sql <- "select * from NIVADATABASE.LABWARE_CHECK_SAMPL where rownum < 5"
+# debugonce(get_nivabase_data)
+check <- get_nivabase_data(sql)
+
+paste(names(check), )
+
+```   
+
+```{r}
+
+
+
+```
+
+
+```{r}
+
+variablestring <- "SAMPLE_TYPE, AQUAMONITOR_ID, AQUAMONITOR_CODE, TEXT_ID, DESCRIPTION, REPORTED_NAME, ANALYS, PARAM"
+
+sql <- paste(
+  "select", variablestring, "from NIVADATABASE.LABWARE_IMPORT where REPORTED_NAME = 'PFOSA'"
+)
+sql
+
+check <- get_nivabase_data(sql)
+
+
+sql <- paste(
+  "select", variablestring, "from NIVADATABASE.LABWARE_IMPORT where lower(REPORTED_NAME) like '%pfosa%'"
+)
+check <- get_nivabase_data(sql)
+
+xtabs(~REPORTED_NAME, check)
+
+```
+
+
+
+
+## 4.  Check existing Labware stations/years  
+
+### Especially sediment at Cm21 in 2019  
+
+```{r}
+
+variablestring <- "SAMPLE_TYPE, SAMPLE_DATE, AQUAMONITOR_ID, AQUAMONITOR_CODE, TEXT_ID, DESCRIPTION, REPORTED_NAME, ANALYS, PARAM, STATUS, STATUSX"
+
+sql <- paste(
+  "select", variablestring, "from NIVADATABASE.LABWARE_IMPORT where AQUAMONITOR_CODE = 'Cm21'"
+)
+check <- get_nivabase_data(sql)
+
+sql <- paste(
+  "select * from NIVADATABASE.LABWARE_IMPORT where AQUAMONITOR_CODE = 'Cm21'"
+)
+check <- get_nivabase_data(sql)
+
+xtabs(~TEXT_ID, check)
+xtabs(~TEXT_ID, check)
+xtabs(~TEXT_ID, check)
+
+check %>%
+  count(TEXT_ID, SAMPLED_DATE)
+
+```

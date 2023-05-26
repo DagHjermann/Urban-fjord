@@ -1,0 +1,232 @@
+---
+title: "0420_Check_Milfersk_2016-2020"
+format: html
+---
+
+* Only 2020 data exists  
+* Only biota, but this projct had only biota   
+* Only PFAS, C + N isotopes and mercury  
+* Lacking data for stations "Op6 - St.1" to "Op6 - St.5"   
+* Lacking data for Femunden ('Miljøgifter i store norske innsjøer, 2013. LNR: 667-2014')  
+
+
+## 1. Setup  
+
+### Functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(knitr)     # for kable
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+## 2.  Check existing NIVAbasen data    
+
+### Stations  
+
+* Only biota stations   
+
+```{r}
+
+df_projects <- get_projects()   
+
+df_projects %>% filter(PROJECT_ID %in% c(11626, 6863))
+#  6863	Miljøgifter i store norske innsjøer, 2013. LNR: 667-2014
+# 11626	MILFERSK
+
+df_stations1 <- get_stations_from_project("MILFERSK", exact = TRUE)
+df_stations2 <- get_stations_from_project("Miljøgifter i store norske innsjøer, 2013. LNR: 667-2014", exact = TRUE)
+
+df_stations <- bind_rows(df_stations1, df_stations2)
+
+nrow(df_stations)
+
+```
+### Check sediment stations  
+
+```{r}
+
+sql <- paste(
+  "select * from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%milfersk%'",
+  "SAMPLE_TYPE = 'SEDIMENT'")
+
+# df_lims_sed <- get_nivabase_data(sql)
+
+get_stations_from_project_id(c(73443, 73439))  
+
+```
+
+
+## 3. 11626	MILFERSK
+
+### Check Access for making VM export file from AqM  
+
+```{r}
+
+get_nivabase_selection("*", "XACCESS", "PROJECT_ID", 11626)
+
+```
+
+
+#### Get all biota data   
+- NOTE: only biota exists!
+
+```{r}
+
+# 
+## Biota samples
+#
+
+df_specimens <- get_specimens_from_stationdata(df_stations, years = 2016:2022)
+message("No. of specimens, biota: ", nrow(df_specimens))
+dat_nb_biota <- get_biota_chemistry(2017:2022, df_specimens, df_stations, report_samples = TRUE)
+
+dat_nb_biota <- dat_nb_biota %>%
+  mutate(Year = year(SAMPLE_DATE))
+
+# 3528
+
+```
+
+
+#### Number of parameters, biota   
+
+* 2020 only!
+
+```{r}
+
+dat_nb_biota %>%
+  distinct(LATIN_NAME, NAME, Year) %>%
+  xtabs(~ Year + LATIN_NAME, .)  
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_nb_biota)
+
+```
+
+
+#### Number of parameters, biota   
+```{r}
+
+dat_nb_biota %>%
+  distinct(LATIN_NAME, STATION_NAME, NAME) %>%
+  xtabs(~STATION_NAME +LATIN_NAME, .)  
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_nb_biota)
+
+```
+
+#### Parameters  
+
+```{r}
+
+dat_nb_biota %>%
+  xtabs(~NAME + Year, .) %>%  head(10)
+
+```
+
+
+#### Number of stations, biota   
+```{r}
+
+dat_nb_biota %>%
+  distinct(LATIN_NAME, Station = paste(STATION_CODE, "|", STATION_NAME), STATION_ID, Year) %>%
+  xtabs(~LATIN_NAME + Station + Year, .)  
+
+# All parameters  
+# xtabs(~NAME + year(SAMPLE_DATE), dat_nb_biota)
+
+# For O-17197 er følgende stasjoner lagt innn, men ingen data:
+# ProjectId	ProjectName	StationId	StationCode	StationName	FullStationName	StationTypeId	StationType	SamplePointId	Latitude	Longitude	EPSG	X	Y
+# 11626	MILFERSK	69716	Op6 - St.1	Ringsakerfjorden	Op6 - St.1 - Ringsakerfjorden	1	Innsjø	62577	60,84506061	10,71340939	32633	267142	6753142
+# 11626	MILFERSK	69717	Op6 - St.2	Helgøya sør	Op6 - St.2 - Helgøya sør	1	Innsjø	62578	60,69548378	11,0257242	32633	283084	6735434
+# 11626	MILFERSK	69718	Op6 - St.3	Furnesfjorden	Op6 - St.3 - Furnesfjorden	1	Innsjø	62579	60,81794375	10,9677253	32633	280759	6749249
+# 11626	MILFERSK	69719	Op6 - St.4	Tangenvika	Op6 - St.4 - Tangenvika	1	Innsjø	62580	60,56954607	11,22760471	32633	293289	6720773
+# 11626	MILFERSK	69720	Op6 - St.5	Minnesund	Op6 - St.5 - Minnesund	1	Innsjø	62581	60,40818174	11,21683044	32633	291666	6702855
+# 11626	MILFERSK	71085	M_Ø	Mjøsa ørret	M_Ø - Mjøsa ørret	1	Innsjø	64326	60,81662489	10,67962587	32633	265100	6750100
+# 11626	MILFERSK	71086	M_KL	Mjøsa krøkle og lågåsild	M_KL - Mjøsa krøkle og lågåsild	1	Innsjø	64327	60,71609581	11,0950276	32633	287000	6737500
+# 11626	MILFERSK	71087	M_ZM	Mjøsa zooplankton og Mysis	M_ZM - Mjøsa zooplankton og Mysis	1	Innsjø	64328	60,69155098	11,02467003	32633	283000	6735000
+# 11626	MILFERSK	71088	F_Ø	Femunden ørret	F_Ø - Femunden ørret	1	Innsjø	64329	62,15112234	11,85238197	32633	336000	6895000
+
+
+```
+
+
+#### Look for "Op6 - St.1" to "Op6 - St.5" - they exist allright   
+
+- and there are no alternative stations that are similar  
+
+```{r}
+
+check <- get_nivabase_data(
+  "select * from NIVADATABASE.PROJECTS_STATIONS where STATION_CODE like '%Op6%'")
+
+```
+
+
+## 3. Checking in LIMS  
+
+### Get "milfersk" samples      
+
+```{r}
+
+# get_nivabase_data("select * from NIVADATABASE.LABWARE_CHECK_SAMPLE where rownum < 4")
+
+# "milfersk" mentioned in PROSJEKT    
+df_proj1 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%milfersk%'")
+
+# Samples with "17197" mentioned in PROSJEKT    
+df_proj2 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%17197%'")
+
+df_proj3 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%210136%'")
+
+proj <- unique(c(df_proj1$PROSJEKT, df_proj2$PROSJEKT, df_proj3$PROSJEKT))
+oppdrag <- unique(c(df_proj1$ANALYSEOPPDRAG, df_proj2$ANALYSEOPPDRAG, df_proj3$ANALYSEOPPDRAG))
+
+# Search using ANALYSEOPPDRAG (PROEJCT is problematic due to charcters)
+df_lims <- get_nivabase_selection(
+  "*", "LABWARE_CHECK_SAMPLE", "ANALYSEOPPDRAG", oppdrag, values_are_text = TRUE)
+
+writexl::write_xlsx(df_lims, "Milfersk/Data/420_LIMS_sample_data_Milfersk_2023-05-25_raw.xlsx")
+
+```
+
+
+```{r}
+xtabs(~is.na(SAMPLED_DATE) + is.na(AQUAMONITOR_NAME) + substr(TEXT_ID, 4, 7), df_lims)
+
+```
+
+```{r}
+
+df_lims %>%
+  arrange(TEXT_ID) %>%
+  count(Year = substr(TEXT_ID, 4, 7), 
+        SAMPLE_TYPE,
+        State = case_when(
+          is.na(SAMPLED_DATE) & !is.na(AQUAMONITOR_NAME) ~ "No date", 
+          !is.na(SAMPLED_DATE) & is.na(AQUAMONITOR_NAME) ~ "No station", 
+          is.na(SAMPLED_DATE) & is.na(AQUAMONITOR_NAME) ~ "No date + station", 
+          !is.na(SAMPLED_DATE) & !is.na(AQUAMONITOR_NAME) ~ "OK")          
+        ) %>%
+  pivot_wider(names_from = State, values_from = n)
+
+```
+
+
+
