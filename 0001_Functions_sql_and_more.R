@@ -265,6 +265,103 @@ make_sql_ids <- function(data, variable){
 # make_sql_ids(biota_chemistry_values, "FLAG1")
 # "('<','NA')"
 
+
+#
+# BIOTA_CHEMISTRY_VALUES
+#
+
+# "VALUE_ID"              - Let the database decide
+# "SAMPLE_ID"             - From the database, after BIOTA_SAMPLES have been inserted
+# "METHOD_ID"             - Lookup based on NAME and UNIT
+# "VALUE"                 - From data
+# "FLAG1"                 - From data
+# "FLAG2"                 - NA
+# "ENTERED_BY"            - DHJ
+# "ENTERED_DATE"          - date, see above
+# "REMARK"                - NA
+# "DETECTION_LIMIT"       - NA
+# "UNCERTAINTY"           - NA
+# "QUANTIFICATION_LIMIT"  - NA
+# "APPROVED"              - NA?
+
+# Table
+# WATER_CHEMISTRY_VALUES
+#
+# Columns
+# WATER_SAMPLE_ID
+# METHOD_ID
+# VALUE
+# FLAG1
+# DETECTION_LIMIT QUANTIFICATION_LIMIT
+# UNCERTAINTY
+
+
+make_sql_waterchemistry_values <- function(i, data){
+  
+  df <- as.data.frame(data)
+  
+  original_options <- options(useFancyQuotes = FALSE)
+  
+  
+  flag <- df[i, 'FLAG1']
+  txt <- paste0("insert into NIVADATABASE.WATER_CHEMISTRY_VALUES ",
+                "(WATER_SAMPLE_ID, METHOD_ID, VALUE, FLAG1, APPROVED)\n",  # \n for line shift
+                "values (",
+                df[i, 'WATER_SAMPLE_ID'], ", ",
+                df[i, 'METHOD_ID'], ", ",
+                round(df[i, 'VALUE'], 6), ", ",
+                ifelse(is.na(flag), "NULL", sQuote(flag)), ", ",
+                1,
+                ")"
+  )
+  options(original_options)
+  txt
+}
+# Test
+# make_sql_waterchemistry_values(1, biota_chemistry_values_eider)
+
+
+
+# Table
+# SEDIMENT_CHEMISTRY_VALUES
+#
+# Columns
+# SLICE_ID
+# METHOD_ID
+# MATRIX - e.g. NS
+# FRACTION_SIZE - typically empty for surface grab chemistry
+# VALUE
+# FLAG1
+# DETECTION_LIMIT 
+# QUANTIFICATION_LIMIT
+# UNCERTAINTY
+
+make_sql_sedimentchemistry_values <- function(i, data){
+  
+  df <- as.data.frame(data)
+  
+  original_options <- options(useFancyQuotes = FALSE)
+  
+  flag <- df[i, 'FLAG1']
+  txt <- paste0("insert into NIVADATABASE.SEDIMENT_CHEMISTRY_VALUES ",
+                "(SLICE_ID, METHOD_ID, MATRIX, VALUE, FLAG1, APPROVED)\n",  # \n for line shift
+                "values (",
+                df[i, 'SLICE_ID'], ", ",
+                df[i, 'METHOD_ID'], ", ",
+                sQuote(df[i, 'MATRIX']), ", ",
+                round(df[i, 'VALUE'], 6), ", ",
+                ifelse(is.na(flag), "NULL", sQuote(flag)), ", ",
+                1,
+                ")"
+  )
+  options(original_options)
+  txt
+}
+# Test
+# make_sql_sedimentchemistry_values(1, df_nilu_03_sed_02)
+
+
+
 #o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
 #
 # Functions for creating BIOTA_SAMPLES_SPECIMENS ----
