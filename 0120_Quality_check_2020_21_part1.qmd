@@ -1,0 +1,157 @@
+---
+title: "0120_Quality_check_2020_21_part1"
+format: html
+editor: visual
+---
+
+## Checking 2021-2022 data part 2
+
+-   Covers biota and sediment (not water or "particle phase" of water)
+
+```{r}
+#|include: false
+
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(readxl)
+
+```
+
+```{r}
+
+# Quality control data  
+datq <- read_excel("Kvalitetssjekk/6oay976 kvalsjekk 14-02-2023 23-23.xlsm", 
+                   sheet = "REG_Sjekk", col_types = "text") %>%
+  mutate(Verdi = as.numeric(Verdi),
+         Tid_provetak_txt = Tid_provetak,
+         Tid_provetak = ymd(Tid_provetak, tz = "UTC"),
+         Year = year(Tid_provetak))
+
+datq_station <- read_excel("Kvalitetssjekk/xag6uv4 kvalsjekk 14-02-2023 14-44.xlsm", 
+                           sheet = "LOK", col_types = "text") %>%
+  mutate(Latitude = as.numeric(Latitude),
+         Longitude = as.numeric(Longitude))
+
+```
+
+## Tables for samples
+
+```{r}
+
+table(datq$Tid_provetak, datq$Year)
+
+```
+
+### Medium by year
+
+```{r}
+
+xtabs(~addNA(medium_navn) + Year, datq)
+
+```
+
+### Medium by station, 2019
+
+```{r}
+
+xtabs(~addNA(medium_navn) + Vannlok_navn, datq %>% filter(Year == 2019))
+xtabs(~addNA(medium_navn) + Vannlok_navn, datq %>% filter(Year == 2019 & grepl("PBDE", Parameter_navn)))    # PBDE is a NILU parameter  
+
+```
+
+### Species and matrix, 2019
+
+```{r}
+
+xtabs(~paste(LatinskNavn_navn, "|",  medium_navn) + Year, datq %>% filter(Year == 2019 & !is.na(LatinskNavn_navn)))
+
+```
+
+### Medium by station, 2020
+
+```{r}
+
+xtabs(~addNA(medium_navn) + Vannlok_navn, datq %>% filter(Year == 2020))
+
+```
+
+### Species by station, 2020
+
+```{r}
+
+xtabs(~addNA(LatinskNavn_navn) + Vannlok_navn, datq %>% filter(Year == 2020))
+
+```
+
+### Species and matrix, 2020
+
+```{r}
+
+xtabs(~paste(LatinskNavn_navn, "|",  medium_navn) + Year, datq %>% filter(Year == 2020 & !is.na(LatinskNavn_navn)))
+
+```
+
+### Medium by station, 2021
+
+```{r}
+
+xtabs(~addNA(medium_navn) + Vannlok_navn, datq %>% filter(Year == 2021))
+
+```
+
+### Species by station, 2020
+
+```{r}
+
+xtabs(~addNA(LatinskNavn_navn) + Vannlok_navn, datq %>% filter(Year == 2020))
+
+```
+
+### Species and matrix, 2020
+
+```{r}
+
+xtabs(~paste(LatinskNavn_navn, "|",  medium_navn) + Year, datq %>% filter(Year == 2020 & !is.na(LatinskNavn_navn)))
+
+```
+
+### Medium by station, 2021
+
+```{r}
+
+xtabs(~addNA(medium_navn) + Vannlok_navn, datq %>% filter(Year == 2021))
+
+```
+
+## Tables for parameters
+
+### 2019
+
+```{r}
+
+datq %>% 
+  filter(Year == 2019 & medium_navn %in% c("Biota lever", "Biota bløtdeler", "Sediment saltvann", "Kloakkslam")) %>%
+  xtabs(~Parameter_navn + medium_navn, .)
+
+```
+
+### 2020
+
+```{r}
+
+datq %>% 
+  filter(Year == 2020 & medium_navn %in% c("Biota lever", "Biota bløtdeler", "Sediment saltvann", "Kloakkslam")) %>%
+  xtabs(~Parameter_navn + medium_navn, .)
+
+```
+
+### 2021
+
+```{r}
+
+datq %>% 
+  filter(Year == 2021 & medium_navn %in% c("Biota lever", "Biota bløtdeler", "Sediment saltvann", "Kloakkslam")) %>%
+  xtabs(~Parameter_navn + medium_navn, .)
+
+```

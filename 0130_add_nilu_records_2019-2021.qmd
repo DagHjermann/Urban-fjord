@@ -1,0 +1,88 @@
+---
+title: "0130_add_nilu_records_2019-2021"
+format: html
+---
+
+
+## 1. Setup  
+
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+# source("../Milkys/991_Vannmiljo_snippets_functions.R")
+# source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+# source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+# source("0110_Data_from_excel_2020-2021_functions.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+## 2. LIMS-based data sent by Benno  
+
+### Read  
+
+```{r}
+
+# readLines("Data_to_Vannmiljo/Data_sent_230419_Benno/REG_kovirbv.csv", n = 3)
+
+dat1 <- read.csv2("Data_to_Vannmiljo/Data_sent_230419_Benno/REG_kovirbv.csv", encoding = "UTF-8")
+dat1_lok <- read.csv2("Data_to_Vannmiljo/Data_sent_230419_Benno/LOK_kovirbv.csv", encoding = "UTF-8")
+
+
+```
+
+### Check locations  
+
+```{r}
+
+table(dat1$Vannlok_kode)
+table(dat1_lok$Kilde_id)
+
+```
+
+### Check times  
+
+```{r}
+
+table(dat1$Tid_provetak)
+
+dat1$Time = ymd(dat1$Tid_provetak)
+
+```
+
+
+
+### Number of parameters per medium
+
+```{r}
+
+dat1 %>%
+  count(Medium_id, Parameter_id, Year = year(Time)) %>%
+  xtabs(~Medium_id + Year, .)
+
+```
+
+
+### Check parameters  
+
+```{r}
+
+table(dat1$Parameter_id)
+
+dat1 %>%
+  count(Medium_navn, Parameter_navn, Year = year(Time)) %>%
+  xtabs(~Medium_navn + Year, .)
+
+
+```
+

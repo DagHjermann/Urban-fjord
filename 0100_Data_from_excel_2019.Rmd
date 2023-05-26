@@ -1,0 +1,117 @@
+---
+title: "0100_Data_from_excel_2019"
+author: "DHJ"
+date: "2023-04-13"
+output: html_document
+---
+
+## 1. Setup  
+
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0110_Data_from_excel_2020-2021_functions.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+## 2. Lookup tables   
+
+* Substance to substance group (Group) + Lab (NIVA / NILU etc)     
+* Substance to substance name and CAS (used for populating METHOD_DEFINITIONS)     
+* TISSUE_ID to TISSUE   
+* SPECIE_ID to LATIN_NAME  
+
+```{r}
+
+# Look-up for substance groups (Group) + Lab (NIVA / NILU etc)    
+lookup_substance_groups <- readxl::read_excel("Input_data/Lookup_files/992_Excel_substances.xlsx")
+
+# Look-up for substance names + CAS numbers   
+# - contains substance names (used in Excel), Decription (long name), Chemspider and CAS 
+# - this equals appendix table B1 of the report
+lookup_substance_names <- readRDS("Input_data/Lookup_files/Report2019_substancetable.rds") 
+
+# From Nivabasen
+# TISSUE_ID 
+
+if (FALSE){
+  # If we want to read from Nivabase
+  lookup_tissues <- get_nivabase_data("select * from LABWARE.V_NIVA_TISSUE_TYPES", source = 'NIVABASE')
+  lookup_species <- get_nivabase_data("select * from LABWARE.V_NIVA_SPECIES", source = 'NIVABASE')
+}
+
+lookup_tissues <- read.csv("Input_data/Lookup_files/lookup_tissues.csv") %>% select(-X)
+lookup_species <- read.csv("Input_data/Lookup_files/lookup_species.csv") %>% select(-X)
+
+```
+
+## 3. Get METHOD_ID used before   
+
+### Data already in NIvabase per 31.12.2022    
+
+```{r}
+
+
+dat_nivabase_bio <- read.table("Input_data/Nivabasen_data_2022/992_dat_biota_nivabase_2017-2021.txt", 
+                               sep = "\t")
+# Outdated! The Water samples are from before the water samples were tidied up in LIMS  
+dat_nivabase_wat <- read.table("Input_data/Nivabasen_data_2022/992_dat_water_nivabase_2017-2021.txt", 
+                               sep = "\t")
+dat_nivabase_sed <- read.table("Input_data/Nivabasen_data_2022/992_dat_sediment_nivabase_2017-2021.txt", 
+                               sep = "\t")
+
+lookup_method_id <- bind_rows(
+  dat_nivabase_bio,
+  dat_nivabase_wat,
+  dat_nivabase_sed
+) %>%
+  distinct(NAME, METHOD_ID, UNIT, LABORATORY, MATRIX)
+
+table(addNA(lookup_method_id$MATRIX))
+
+```
+
+### Get all NILU methods   
+
+```{r}
+
+if (FALSE){
+
+  # Read data from Nivabasen  
+  # - ONE-TIME JOB (therefore wrapped in "if FALSE") - if already done, read the saved file
+  # - gets data from Nivabase and save it   
+  
+  library(niRvana)
+  
+  lookup_method_id_allnilu <- get_nivabase_selection(
+    columns = "NAME, METHOD_ID, UNIT, MATRIX, LABORATORY",
+    table = "METHOD_DEFINITIONS", 
+    selection_column = "LABORATORY",
+    selection_values = "NILU", values_are_text = TRUE)
+  
+  # Write with tab as separator to avoid trouble with commas in names etc.  
+  write.table(lookup_method_id_allnilu, "Data/0110_dat_nivabase_nilu_methods.txt",
+              sep = "\t", row.names = FALSE)
+  
+}
+
+lookup_method_id_allnilu <- read.table(
+  "Data/0110_dat_nivabase_nilu_methods.txt", sep = "\t", header = TRUE)
+
+table(addNA(lookup_method_id_allnilu$MATRIX))
+
+```

@@ -1,0 +1,37 @@
+---
+title: "0110_Data_2016-2018"
+author: "DHJ"
+date: "2023-03-10"
+output: html_document
+---
+
+
+
+## 1. Setup  
+
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("001_Functions_sql_and_more.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+```{r}
+
+
+
+```
+
