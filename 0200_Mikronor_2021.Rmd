@@ -1,0 +1,223 @@
+---
+title: "0200_Mikronor_2021"
+author: "DHJ"
+date: "2023-02-22"
+output: html_document
+---
+
+
+
+
+## 1. Setup  
+
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0110_Data_from_excel_2020-2021_functions.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+## 2. Data  
+
+### Data from all labs  
+
+```{r}
+
+dat_all_raw <- read_excel("Milfersk/Tabulate_Results stack ‎MILFERSK2022.xlsx", sheet = "Tabulate_Results stack ‎MILFERS", col_types = "text")  
+
+# check
+# dat_all_raw$`Result>LOQ` %>% sample(200)
+
+# New data: dat_all
+dat_all <- dat_all_raw  
+dat_all$VALUE <- NA
+dat_all$FLAG1 <- as.character(NA)
+
+# Values over LOQ
+sel <- !is.na(dat_all$`Result>LOQ`)
+mean(sel)
+dat_all$VALUE[sel] <- as.numeric(dat_all$`Result>LOQ`[sel])
+
+# Values under LOQ
+sel <- !is.na(dat_all$`LOQ`)
+mean(sel)
+dat_all$VALUE[sel] <- as.numeric(dat_all$`LOQ`[sel])
+
+# Shoudl be the sum of the numbers above  
+mean(!is.na(dat_all$VALUE))
+
+# Check
+# dat_all %>% filter(is.na(VALUE)) %>% View()
+
+dat_all <- dat_all %>%
+  # Select columns
+  select(LIMS, Abbr, VALUE, FLAG1, `Lab[Abbr]`) %>%
+  # Remove rows with no data
+  filter(!is.na(VALUE))
+
+if (FALSE){
+  # Check
+  dat_all %>% filter(is.na(`Lab[Abbr]`)) %>% View()
+  dat_all_raw %>% filter(is.na(`Lab[Abbr]`)) %>% View()
+}
+
+table(addNA(dat_all$`Lab[Abbr]`))
+
+```
+
+### NILU data  
+
+```{r}
+
+dat_nilu_01 <- dat_all %>%
+  filter(`Lab[Abbr]` %in% "NILU")
+
+```
+
+
+### Lookup for parameter names in biota   
+
+- Made from biota data, above    
+
+```{r}
+
+lookup_names_biota_orig <- readRDS("Data/0110_df_names_biota.rds")
+
+lookup_names_biota <- bind_rows(
+  lookup_names_biota_orig,
+  data.frame(NAME_orig = "4-tert-octylphenol", NAME_modified = "4-tert-octylphenol", METHOD_ID = 28447),
+  data.frame(NAME_orig = "Traseolide", NAME_modified = "Traseolid", METHOD_ID = 38031),
+)
+
+```
+
+
+## Check parameter names   
+
+### Check  1  
+```{r}
+
+nm1 <- unique(dat_nilu_01$Abbr)
+nm2 <- unique(lookup_names_biota$NAME_modified)
+
+if (FALSE){
+  setdiff(nm1, nm2)
+  setdiff(nm2, nm1)
+}
+
+```
+### Rinse and repeat  
+```{r}
+
+# "Rinse and repeat":
+#
+# Modify the code for 'NAME_modified' until the tests in the next chunk are acceptable
+#   (i.e. only unimportant parameters are lost)
+#
+
+dat_nilu_01 <- dat_nilu_01 %>%
+  mutate(
+    NAME_modified = case_when(
+      grepl("^PCB", Abbr) ~ sub("PCB ", "PCB-", Abbr, fixed = TRUE),
+      Abbr %in% c("Cr", "Fe", "Ni", "Cu", "Zn", "As", "Ag", "Cd", "Sb", "Pb") ~ toupper(Abbr),
+      Abbr %in% "4-Nonylphenol, branched and linear" ~ "4-Nonylphenol",
+      Abbr %in% "2,4-Bisphenol S" ~ "2,4-bisphenol S",
+      Abbr %in% "Traseolide" ~ "Traseolid",
+      TRUE ~ Abbr
+    )
+  )
+
+```
+
+
+### Check 2  
+```{r}
+
+nm1 <- unique(dat_nilu_01$NAME_modified)
+nm2 <- unique(lookup_names_biota$NAME_modified)
+
+if (FALSE){
+  setdiff(nm1, nm2) %>% dput()
+  setdiff(nm2, nm1)
+}
+
+```
+### Checkinh METHOD_DEFINITIONS  
+```{r}
+
+nm <- setdiff(nm1, nm2)
+nm <- nm[nm != "ΣPCB7"]  
+nm
+
+# "DIDP/DNDP"  - ikke i Vannmiljø ("Sum DPHP og DIDP" er der)
+# "4NPEO1", "4NPEO2", "4NPEO3",
+# "4TOPEO1", "4TOPEO2", "4TOPEO3"
+# "OPEO2", 
+# "4-tert-butylphenol" - VM: BUPHE4T = 4-tert-butylfenol  
+# "4-tert-pentylphenol" - VM: PEPHE4T	= 4-tert-Pentylfenol  
+
+"p-octylphenol")
+
+if (FALSE){
+  df_check <- get_nivabase_selection(
+    "NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX, MATRIX_ID",
+    "METHOD_DEFINITIONS", 
+    "NAME", 
+    nm, values_are_text = TRUE)
+  
+  get_nivabase_data(paste(
+    "select NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX, MATRIX_ID",
+    "from NIVADATABASE.METHOD_DEFINITIONS", 
+    "where lower(NAME) like '%4-nonyl%'"))#  %>% View()
+  
+  get_nivabase_data(paste(
+    "select NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX, MATRIX_ID",
+    "from NIVADATABASE.METHOD_DEFINITIONS", 
+    "where lower(NAME) like '%butylphenol%'")) # %>% View()
+  
+  get_nivabase_data(paste(
+    "select NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX, MATRIX_ID",
+    "from NIVADATABASE.METHOD_DEFINITIONS", 
+    "where lower(NAME) like '%pentylphenol%'")) # %>% View()
+  
+  get_nivabase_data(paste(
+    "select NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX, MATRIX_ID",
+    "from NIVADATABASE.METHOD_DEFINITIONS", 
+    "where lower(NAME) like '%octylphenol%'")) # %>% View()
+  
+  get_nivabase_data(paste(
+    "select NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX, MATRIX_ID",
+    "from NIVADATABASE.METHOD_DEFINITIONS", 
+    "where lower(NAME) like '%tras%'")) # %>% View()
+  
+  get_nivabase_data(paste(
+    "select NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX, MATRIX_ID",
+    "from NIVADATABASE.METHOD_DEFINITIONS", 
+    "where lower(NAME) like '%didp%'")) # %>% View()
+  
+  get_nivabase_data(paste(
+    "select NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX, MATRIX_ID",
+    "from NIVADATABASE.METHOD_DEFINITIONS", 
+    "where lower(NAME) like '%monoetoks%'")) # %>% View()
+
+}
+
+
+
+
+```
+
