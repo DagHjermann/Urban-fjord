@@ -1,12 +1,12 @@
 ---
-title: "510_Excel_Milfersk_2021"
+title: "300_Excel_Milfersk_2021"
 format: html
 ---
 
 
 ## Read excel data from researchers    
 
-*NOTE: also uses Labware + Nivabase data from the corresponding scripts 300 and 400*  
+*NOTE: also uses Labware + Nivabase data from the corresponding scripts 100 and 200*  
 So actually thosre scripts should be run first  
 
 
@@ -181,13 +181,13 @@ if (nrow(check) > 0)
 
 
 
-## 3. Compare sample IDs with TEXT_ID in the Labware data (scr. 300)   
+## 3. Compare sample IDs with TEXT_ID in the Labware data (scr. 100)   
 
-### a. Labware data (scr. 300) 
+### a. Labware data (scr. 100) 
 
 ```{r}
 
-dat_lab <- readRDS("Data/300_dat_lab_Milfersk_2021_2023-06-06.rds")  
+dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2021_2023-06-06.rds")  
 
 ```
 
@@ -301,13 +301,13 @@ dat_wide %>%
 
 ```
 
-### Nivabase data (from script 400)  
+### Nivabase data (from script 200)  
 
 ```{r}
 
-dir("Data", "400_dat_nb_biota_Milfersk_2021")
+dir("Data", "200_dat_nb_biota_Milfersk_2021")
 
-dat_nb_biota <- readRDS("Data/400_dat_nb_biota_Milfersk_2021_2023-06-06.rds")
+dat_nb_biota <- readRDS("Data/200_dat_nb_biota_Milfersk_2021_2023-06-06.rds")
 
 dat_head3
 

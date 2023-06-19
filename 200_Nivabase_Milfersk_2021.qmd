@@ -1,10 +1,10 @@
 ---
-title: "Script 400_Nivabase_Milfersk_2021"
+title: "Script 200_Nivabase_Milfersk_2021"
 format: html
 ---
 
 3b. Read data from Nivabase   
-- Script 400_Nivabase_[program]_[year]     
+- Script 200_Nivabase_[program]_[year]     
 - functions  
     - get_stations_from_project_id  
     - get_specimens_from_stationdata   
@@ -260,12 +260,12 @@ bind_rows(df1, df2, df3)
 
 ```{r}
 
-saveRDS(dat_nb_biota, paste0("Data/400_dat_nb_biota_", program_year, "_", today(), ".rds"))
-saveRDS(dat_nb_water, paste0("Data/400_dat_nb_water_", program_year, "_", today(), ".rds"))
-saveRDS(dat_nb_sediment, paste0("Data/400_dat_nb_sediment_", program_year, "_", today(), ".rds"))
+saveRDS(dat_nb_biota, paste0("Data/200_dat_nb_biota_", program_year, "_", today(), ".rds"))
+saveRDS(dat_nb_water, paste0("Data/200_dat_nb_water_", program_year, "_", today(), ".rds"))
+saveRDS(dat_nb_sediment, paste0("Data/200_dat_nb_sediment_", program_year, "_", today(), ".rds"))
 
 if (FALSE){
-  files <- dir("Data", "400_dat_nb_sediment_", full.names = TRUE) %>% sort(decreasing = TRUE)
+  files <- dir("Data", "200_dat_nb_sediment_", full.names = TRUE) %>% sort(decreasing = TRUE)
   dat_nb_sediment <- readRDS(files[1])
   table(dat_nb_sediment$SLICE_ID)
 }

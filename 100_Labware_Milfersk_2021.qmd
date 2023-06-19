@@ -1,10 +1,10 @@
 ---
-title: "300_Labware_Milfersk_2021"
+title: "100_Labware_Milfersk_2021"
 format: html
 ---
 
 ## Read samples from Labware LIMS   
-- Script 300_Labware_[program]_[year]     
+- Script 100_Labware_[program]_[year]     
 - function get_labware_samples    
 - for comparing samples in Labware with samples in report, and (later) with other data   
 
@@ -134,7 +134,7 @@ df_lab %>%
 
 ```{r}
 
-fn <- paste0("Data/300_dat_lab_", program_year, "_", today(tzone = "UTC"), ".rds")
+fn <- paste0("Data/100_dat_lab_", program_year, "_", today(tzone = "UTC"), ".rds")
 saveRDS(df_lab, fn)
 
 ```
