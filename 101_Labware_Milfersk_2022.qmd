@@ -1,10 +1,10 @@
 ---
-title: "100_Labware_Milfersk_2021"
+title: "100_Labware_Milfersk_2022"
 format: html
 ---
 
 ## Read samples from Labware LIMS   
-- Script 100_Labware_[program]_[year]     
+- Script 1**_Labware_[program]_[year]     
 - function get_labware_samples    
 - for comparing samples in Labware with samples in report, and (later) with other data   
 
@@ -14,7 +14,7 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2021"
+program_year <- "Milfersk_2022"
 
 ```
 
@@ -29,6 +29,7 @@ library(readxl)
 library(ggplot2)
 library(tidyr)  
 library(knitr)     # for kable
+library(glue)      # alternative to paste()  
 # library(fuzzyjoin)   # regex_full_join
 
 source("../Milkys/991_Vannmiljo_snippets_functions.R")
@@ -77,13 +78,16 @@ df_lab_all %>%
 ```{r}
 
 df_lab <- df_lab_all %>% 
-  filter(year(SAMPLED_DATE) == 2021)  
+  filter(year(SAMPLED_DATE) == 2022)  
 
 ```
 
 ### Tables  
 
 #### Stations  
+
+* NOTE: Station lacking for 79 samples ! 
+
 ```{r}
 
 df_lab %>%
@@ -91,8 +95,37 @@ df_lab %>%
 
 ```
 
+#### Samples where station is lacking  
+```{r}
 
-#### Benthic food chain     
+df_lab %>%
+  filter(is.na(AQUAMONITOR_ID)) %>% # View()
+  count(SAMPLE_TYPE, SPECIES, TISSUE) 
+
+```
+#### Samples where station is lacking and species not given   
+```{r}
+
+df_lab %>%
+  filter(is.na(AQUAMONITOR_ID) & SPECIES == "Ikke angitt") %>% # View()
+  count(DESCRIPTION) 
+
+```
+
+#### Check date  
+
+* OK 
+
+```{r}
+
+df_lab %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SAMPLED_DATE) 
+
+```
+
+
+
+#### Station "Benthic food chain"       
 
 ```{r}
 
@@ -134,7 +167,9 @@ df_lab %>%
 
 ```{r}
 
-fn <- paste0("Data/100_dat_lab_", program_year, "_", today(tzone = "UTC"), ".rds")
+fn <- glue::glue("Data/100_dat_lab_{program_year}_{today(tzone = 'UTC')}.rds")
+fn
+
 saveRDS(df_lab, fn)
 
 ```
