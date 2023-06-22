@@ -1,0 +1,1758 @@
+---
+title: "300_Excel_Milfersk_2021"
+format: html
+---
+
+
+## Read excel data from researchers    
+
+*NOTE: also uses Labware + Nivabase data from the corresponding scripts 100 and 200*  
+So actually thosre scripts should be run first  
+
+
+- combining NIVA and NILU data (NIVA data should be in Nivabase, but is sometimes stuck in Labware)   
+- custom code per file / project  
+- save as standardized files (csv + rds)  
+
+- Also adds data to Nivabasen  
+
+- Data saved (including modified parameter name 'Value2' and METHOD_ID)  
+    - as threed dfifferent files (both rds and excel format)  
+    
+- NOTE: the data saved contains two types of errors in the actual values:  
+    - negative values for data <LOQ (see 3d and Appendix 1)  
+    - mismatch value / unit (see 9b, 11b and in particular 13b, and Appendix 2)    
+    
+- NOTE 2: use MATRIX_ID instead of MATRIX when making new methods  
+
+
+## 1. Setup  
+
+### Settings  
+```{r}
+
+string_saved_data <- "Milfersk_2021"
+
+```
+
+### Packages and scripts    
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+ source("../Milkys/991_Vannmiljo_snippets_functions.R")
+ source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+# source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0001_Functions_sql_and_more.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+#### Function for adding methods    
+
+```{r}
+
+make_sql_methods3 <- function(name, unit, lab, descr = NA, cas = NA, method = NA, matrix = NA){
+  
+  original_options <- options(useFancyQuotes = FALSE)
+  
+  txt <- paste0(
+    "insert into NIVADATABASE.METHOD_DEFINITIONS ",
+    "(NAME, DESCR, UNIT, LABORATORY, CAS, METHOD_REF, MATRIX)\n",  # \n for line shift
+    "values (",
+    ifelse(is.na(name), "NULL", sQuote(name)), ", ",
+    ifelse(is.na(descr), "NULL", sQuote(descr)), ", ",
+    ifelse(is.na(unit), "NULL", sQuote(unit)), ", ",
+    ifelse(is.na(lab), "NULL", sQuote(lab)), ", ",
+    ifelse(is.na(cas), "NULL", sQuote(cas)), ", ", 
+    ifelse(is.na(method), "NULL", sQuote(method)), ", ", 
+    ifelse(is.na(matrix), "NULL", sQuote(matrix)), 
+    ");"
+  )
+  options(original_options)
+  txt
+}
+
+
+```
+
+
+### Functions for adding measurements  
+
+```{r}
+
+# Input:
+#   Row number (in data frame)
+#   Data frame with columns SAMPLE_ID, METHOD_ID, VALUE, FLAG1  
+
+make_sql_chemistry_values <- function(i, data){
+  
+  df <- as.data.frame(data)
+  
+  original_options <- options(useFancyQuotes = FALSE)
+
+  flag <- df[i, 'FLAG1']
+  txt <- paste0("insert into NIVADATABASE.BIOTA_CHEMISTRY_VALUES ",
+                "(SAMPLE_ID, METHOD_ID, VALUE, FLAG1, APPROVED)\n",  # \n for line shift
+                "values (",
+                df[i, 'SAMPLE_ID'], ", ",
+                df[i, 'METHOD_ID'], ", ",
+                round(df[i, 'VALUE'], 6), ", ",
+                ifelse(is.na(flag), "NULL", sQuote(flag)), ", ",
+                1,
+                ")"
+  )
+  options(original_options)
+  txt
+}
+
+# Test
+# make_sql_chemistry_values(1, biota_chemistry_values_eider)
+
+
+
+make_sql_chemistry_values <- function(i, data){
+  
+  df <- as.data.frame(data)
+  
+  original_options <- options(useFancyQuotes = FALSE)
+
+  flag <- df[i, 'FLAG1']
+  txt <- paste0("insert into NIVADATABASE.BIOTA_CHEMISTRY_VALUES ",
+                "(SAMPLE_ID, METHOD_ID, VALUE, FLAG1, APPROVED)\n",  # \n for line shift
+                "values (",
+                df[i, 'SAMPLE_ID'], ", ",
+                df[i, 'METHOD_ID'], ", ",
+                round(df[i, 'VALUE'], 6), ", ",
+                ifelse(is.na(flag), "NULL", sQuote(flag)), ", ",
+                1,
+                ")"
+  )
+  options(original_options)
+  txt
+}
+
+# Test
+# make_sql_chemistry_values(1, biota_chemistry_values_eider)
+
+
+
+```
+
+## 2. Read data  
+
+### Read headers  
+
+* Read data (wide format)  
+* Set column names  
+* Remove rows with no data in column number 3 (this is either sum parameter results, or units)  
+
+```{r}
+
+dat_head1 <- read_excel("Input_data/2021/All_results MILFERSK2021_edit.xlsx", col_names = FALSE, n_max = 5)  
+dat_head2 <- t(as.matrix(dat_head1))
+# dat_head2
+# Correct TEXT_ID for Labware  
+dat_head2[,4] <- paste0("NR-", substr(dat_head2[,4], 4, 13))
+
+# Add three first col names
+dat_head2[1:3, 4] <- c("Paramgroup", "Comment", "Param")  
+
+dat_head3 <- as.data.frame(dat_head2)
+
+check <- dat_head3 %>%
+  add_count(V4) %>%
+  filter(n > 1)
+
+if (nrow(check) > 0)
+  stop("Some IDs are duplicated")
+
+
+```
+
+
+
+## 3. Compare sample IDs with TEXT_ID in the Labware data (scr. 100)   
+
+### a. Labware data (scr. 100) 
+
+```{r}
+
+dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2021_2023-06-06.rds")  
+
+```
+
+
+* If this doesn't stop with error, there is a 100% overlap between IDsin the exccel and in Labware  
+
+```{r}
+
+check_textid <- dat_lab %>%
+  select(DESCRIPTION, AQUAMONITOR_NAME, SPECIES, TISSUE, TEXT_ID) %>%
+  full_join(dat_head3[-(1:3),], by = c("TEXT_ID" = "V4"))  
+
+check1 <- check_textid %>%
+  filter(is.na(V3))
+
+if (nrow(check1) > 0)
+  stop("It appears that some TEXT_ID(s) in the Labware file is not matched by any sample in the excel file (check out dataset check1)")
+
+check2 <- check_textid %>%
+  filter(is.na(TEXT_ID))
+
+if (nrow(check2) > 0)
+  stop("It appears that some sample(s) in the excel file is not matched by any TEXT_ID in the Labware file (check out dataset check2)")
+
+
+```
+
+
+### b. Read data on broad format  
+
+* Read data (wide format)  
+* Set column names  
+* Remove rows with no data in column number 3 (this is either sum parameter results, or units)  
+
+
+```{r}
+
+dat_all <- read_excel("Input_data/2021/All_results MILFERSK2021_edit.xlsx", skip = 6, col_names = FALSE, col_types = "text")  
+
+if (nrow(dat_head2) != ncol(dat_all))
+  stop("Must be equal")
+
+# Set column names using the headers read in previous chunk 
+names(dat_all) <- dat_head3[, 4]
+
+# Remove rows with no Param  
+sel_delete <- is.na(dat_all$Param)
+
+# Wide format
+dat_wide <- dat_all[!sel_delete,] 
+
+# Remove PCB7
+sel_delete <- grepl("PCB7", dat_wide$Param)
+dat_wide <- dat_wide[!sel_delete,]
+
+
+```
+
+
+
+### c. Put on long format   
+
+* Note: the warning 'NAs introduced by coercion' is exopected here  
+
+```{r}
+
+dat1 <- dat_wide %>%
+  select(-Comment) %>%
+  pivot_longer(-c(Param, Paramgroup), names_to = "TEXT_ID", values_to = "Value_chr1") %>%
+  mutate(
+    Value_chr2 = sub(",", ".", Value_chr1, fixed = TRUE),   # in case decimal coma has been used (it has)    
+    VALUE = as.numeric(sub("<", "", Value_chr2)),
+    FLAG1 = case_when(
+      grepl("<", Value_chr2) ~ "<", 
+      TRUE ~ as.character(NA))
+    )
+
+dat2 <- dat1 %>%
+  filter(!is.na(VALUE)) %>%
+  select(TEXT_ID, Param, Paramgroup, VALUE, FLAG1) 
+
+```
+
+### d. Check for negative values  
+
+```{r}
+
+# NOTE: This should have been checked, but wasn't discovered until afterwards! See Appendix 1.
+
+```
+
+
+
+## 4. Checking parameters     
+
+### Parameter groups   
+
+```{r}
+
+dat_wide %>%
+  group_by(Paramgroup) %>%
+  summarize(n = n(), Param = substr(paste(sort(Param), collapse = "; "), 1, 80))
+
+# Already in Labware + Nivabase:
+#   PFAS (incl. newPFAS)  
+#   Quaternary ammonium compounds
+#   Pesticides Fungicides
+#   UV compounds
+#   Benzothiazoles
+
+
+```
+
+### Nivabase data (from script 200)  
+
+```{r}
+
+dir("Data", "200_dat_nb_biota_Milfersk_2021")
+
+dat_nb_biota <- readRDS("Data/200_dat_nb_biota_Milfersk_2021_2023-06-06.rds")
+
+dat_head3
+
+dat_nb_biota %>%
+  count(NAME)
+
+```
+
+
+## 5. Add columns  
+
+### Add lab source  
+
+```{r}
+
+# for writing the code below:
+# unique(dat_wide$Paramgroup) %>% dput
+
+paramgroups <- unique(dat_wide$Paramgroup)
+paramgroups_niva <- c("PFAS", "Pesticides Fungicides", "Quaternary ammonium compounds", "UV compounds", "Benzothiazoles")
+paramgroups_nilu <- setdiff(paramgroups, paramgroups_niva)
+
+dat2 <- dat2 %>%
+  mutate(
+    Lab = case_when(
+      Paramgroup %in% paramgroups_niva ~ "NIVA",
+      Paramgroup %in% paramgroups_nilu ~ "NILU")
+  )
+
+
+```
+
+### Add matrix  
+
+```{r}
+
+dat3 <- dat2 %>%
+  left_join(
+    dat_head3[-(1:3),] %>% select(TEXT_ID = V4, V1, V3), by = "TEXT_ID"
+  ) %>%
+  left_join(
+    dat_lab %>% select(TEXT_ID, SAMPLE_TYPE), by = "TEXT_ID"
+  )
+
+
+```
+
+
+## 6. Add Sample IDs      
+
+### Get IDs
+
+```{r}
+
+# Find all tables starting with LABWARE:
+# get_nivabase_data("select OWNER,TABLE_NAME,COLUMN_NAME from ALL_TAB_COLUMNS where table_name like 'LABWARE%' and OWNER = 'NIVADATABASE'")  
+
+dat_lab_biota <- get_nivabase_selection(
+  c("BIOTA_SAMPLE_ID, LABWARE_TEXT_ID"),
+  "LABWARE_BSID", 
+  "LABWARE_TEXT_ID", unique(dat3$TEXT_ID), values_are_text = TRUE)
+
+dat_lab_water <- get_nivabase_selection(
+  c("WATER_SAMPLE_ID, LABWARE_TEXT_ID"),
+  "LABWARE_WSID", 
+  "LABWARE_TEXT_ID", unique(dat3$TEXT_ID), values_are_text = TRUE)
+
+dat_lab_sediment <- get_nivabase_selection(
+  c("SLICE_ID, LABWARE_TEXT_ID"),
+  "LABWARE_SLICE_ID", 
+  "LABWARE_TEXT_ID", unique(dat3$TEXT_ID), values_are_text = TRUE)
+
+```
+
+### Add to data  
+
+```{r}
+
+dat4 <- dat3 %>%
+  left_join(dat_lab_biota, by = c("TEXT_ID" = "LABWARE_TEXT_ID")) %>%
+  left_join(dat_lab_water, by = c("TEXT_ID" = "LABWARE_TEXT_ID")) %>%
+  left_join(dat_lab_sediment, by = c("TEXT_ID" = "LABWARE_TEXT_ID"))
+
+```
+
+
+## 7. Get methods     
+
+```{r}
+
+df_methods_all <- readRDS("Data/df_methods_all.rds")
+
+```
+
+
+## 8. Biota, add METHOD_ID  
+
+### a. Add Param2  
+
+```{r}
+
+elements <- c("Ag", "As", "Cd", "Cr", "Cu", "Fe", 
+              "Ni", "Pb", "Sb", "Zn")
+# Except Hg!
+
+dat4_biota <- dat4 %>%
+  filter(Lab %in% "NILU" & SAMPLE_TYPE == "BIOTA") %>%
+  mutate(
+    Param2 = case_when(
+      Param %in% elements ~ toupper(Param),
+      Param %in% "PeCB" ~ "Pentachlorobenzene (PeCB)",
+      Param %in% "Traseolide" ~ "Traseolid",
+      TRUE ~ Param),
+    Param2 = sub("PCB ", "CB", Param2, fixed = TRUE),
+    Param2 = sub("BDE-", "BDE", Param2, fixed = TRUE)
+  )
+
+dat4_biota %>% filter(Param == "BDE-99")
+
+```
+
+
+
+
+
+
+### b. Add lacking methods  
+```{r}
+
+sql <- make_sql_methods3(
+  name = "DIDP/DNDP", 
+  unit = "ng/g w.w.",
+  lab = "NILU",
+  matrix = "BIOTA")
+
+sql
+writeLines(sql, "clipboard-1024")
+
+# add in SQL Developer
+# METHOD_ID = 39263
+
+```
+
+
+### c. Pick methods from METHOD_DEFINITIONS  
+
+```{r}
+
+df_methods_biota_list <- list()
+
+# Metals, CB, BDE 
+df_methods_biota_list[[1]] <- df_methods_all %>%
+  filter(LABORATORY %in% "NILU" & MATRIX %in% "BIOTA" & ENTERED_BY %in% "DHJ") %>%
+  filter(!METHOD_ID %in% 35113)   # HG given in ng/g, should be in ug/g (or mg/kg)
+
+# oPFR (except TPP and TTrP), PeCB
+df_methods_biota_list[[2]] <- df_methods_all %>%
+  filter(METHOD_ID %in% c(32812:32830, 34241, 34239, 34245, 34246, 32369)) %>%
+  filter(!NAME %in% c("TXP", "TIPPP")) %>%
+  filter(!UNIT %in% "µg/kg t.v.")
+
+# df_methods_biota_list[[2]] <- df_methods_all %>%
+#   filter(METHOD_ID %in% 32812:32904)  
+# View(df_methods_biota_list[[2]])
+
+
+# Cholorparaffines, solixanmes
+df_methods_biota_list[[3]] <- df_methods_all %>%
+  filter(METHOD_ID %in% c(27791:27795)) 
+
+# New method
+new_method <- niRvana::get_nivabase_selection("*", "METHOD_DEFINITIONS", "NAME", "DIDP/DNDP", values_are_text = TRUE)
+df_methods_biota_list[[4]] <- new_method %>% filter(MATRIX == "BIOTA")
+
+# oPFR: TPP and TTrP   
+df_methods_biota_list[[5]] <- df_methods_all %>%
+  filter(METHOD_ID %in% c(32901, 32902)) 
+
+# Hg given in ug/g
+df_methods_biota_list[[6]] <- df_methods_all %>%
+  filter(METHOD_ID %in% c(27781))
+
+# Combine
+df_methods_biota <- bind_rows(df_methods_biota_list)
+
+check <- df_methods_biota %>%
+  add_count(NAME) %>% 
+  filter(n > 1)
+
+if (nrow(check) > 0)
+  stop("Duplicates in NAME")
+
+```
+
+
+### d. Parameters in excel data  
+
+```{r}
+
+df_parameters_biota <- dat4_biota %>%
+  distinct(Paramgroup, Param, Param2)
+
+```
+
+### e. Check parameters  
+
+```{r}
+
+n1 <- nrow(df_parameters_biota)
+
+df_parameters_biota <- df_parameters_biota %>%
+  left_join(df_methods_biota %>% select(NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX),
+            by = c("Param2" = "NAME"))
+
+n2 <- nrow(df_parameters_biota)
+if (n2 > n1)
+
+check <- df_parameters_biota %>% 
+  filter(is.na(METHOD_ID))
+
+if (nrow(check) > 0)
+  stop("Some 'Param2' are not matched")
+
+
+```
+
+### f. Check unit  
+
+```{r}
+
+#
+# NOTE: for a better approach, see 12f!
+#
+
+table(df_parameters_biota$UNIT)
+
+# Check 
+#    µg/g (should be metals)
+#    µg/kg + ng/g (should be non-metals)
+#
+# df_parameters_biota %>% filter(UNIT %in% c("µg/g w.w.", "µg/g (w.w.)")) %>% pull(Param2)
+# df_parameters_biota %>% filter(!UNIT %in% c("µg/g w.w.", "µg/g (w.w.)")) %>% pull(Param2)
+
+```
+
+
+## 9. Biota, add measurements  
+
+### a. Add METHOD_ID to data  
+
+```{r}
+
+check <- df_methods_biota %>% 
+  add_count(NAME) %>%
+  filter(n > 1)
+
+if (nrow(check) > 0)
+  stop("Some 'NAME' are duplicated")
+
+dat4_biota <- dat4_biota %>%
+  left_join(df_methods_biota %>% select(NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX),
+            by = c("Param2" = "NAME")) %>%
+  rename(SAMPLE_ID = BIOTA_SAMPLE_ID)
+
+```
+
+
+### b. Change values according to unit  
+
+- E.g., if the data has metals in ug/g, but the unit for the method is mg/kg    
+- Fully manual (look in the original excel sheet to know what is correct)  
+
+```{r}
+
+# Rare earth metals given in mg/kg in excel, assigned ug/kg in Nivabase (through the method)    
+
+# SHOULD HAVE BEEN DONE HERE (see part 13 for example) - INSTAED CHANGED DIRECTLY IN NIVABASE USING SQL  
+
+```
+
+
+### c. Make SQLs, add measurements    
+
+PASTE INTO SQL DEVELOPER TO ADD THE RECORDS  
+```{r}
+
+sql_list <- 1:nrow(dat4_biota) %>% 
+  map_chr(make_sql_chemistry_values, 
+          data = dat4_biota)
+length(sql_list) # 1303
+
+i <- 1:length(sql_list)
+sql <- paste(sql_list[i], collapse = ";\n")
+sql <- paste0(sql, ";\n")
+writeLines(sql, "clipboard-1024")   # copies SQLs to clipboard - go to SQL Developer and paste
+                                    # "clipboard-1024" instead of "clipboard": increases avaliable
+                                    #    for the clipboard
+cat("Length of sql_list:", 
+    length(sql_list), "\n\n")
+
+cat("Two first and two last SQLs: \n\n")
+head(sql_list, 2)
+tail(sql_list, 2)
+
+```
+
+
+#### Check 1   
+Get Nivabasen data (measurement level)   
+```{r}
+
+table(dat4_biota$SAMPLE_ID) 
+
+ids <- as.numeric(unique(dat4_biota$SAMPLE_ID)) 
+
+df1 <- get_nivabase_selection(
+  "*",
+  "BIOTA_CHEMISTRY_VALUES",
+  "SAMPLE_ID", 
+  ids)
+
+df2 <- get_nivabase_selection(
+  "METHOD_ID, NAME, UNIT, LABORATORY, MATRIX",
+  "METHOD_DEFINITIONS",
+  "METHOD_ID", 
+  unique(df1$METHOD_ID))
+
+df1 <- df1 %>%
+  left_join(df2, by = "METHOD_ID")  
+
+xtabs(~MATRIX + SAMPLE_ID, df1)
+
+```
+
+#### Check 2  
+*After this check, rerun part 5 Nivadatabasen data - biota*   
+```{r}
+
+ggplot(df1, aes(factor(SAMPLE_ID), NAME)) +
+  geom_point()
+
+```
+### d. Save data and method names and IDs used  
+
+```{r}
+
+fn1 <- paste0("Data/100_", string_saved_data, "_biota.rds")
+fn2 <- paste0("Data/100_", string_saved_data, "_biota.xlsx")
+
+saveRDS(dat4_biota, fn1)
+writexl::write_xlsx(dat4_biota, fn2)
+
+```
+
+
+
+
+## 10. Sediment, add METHOD_ID  
+
+### a. Add Param2  
+
+```{r}
+
+elements <- c("Ag", "As", "Cd", "Cr", "Cu", "Fe", 
+              "Ni", "Pb", "Sb", "Zn")
+# Except Hg!
+
+dat4_sediment <- dat4 %>%
+  filter(Lab %in% "NILU" & SAMPLE_TYPE == "SEDIMENT") %>%
+  mutate(
+    Param2 = case_when(
+      Param %in% "PeCB" ~ "Pentachlorobenzene (PeCB)",
+      Param %in% "Traseolide" ~ "Traseolid",
+      Param %in% "TBA" ~ "Tribromoanisole (TBA)",
+      TRUE ~ Param),
+    Param2 = sub("PCB ", "PCB-", Param2, fixed = TRUE)
+  )
+
+dat4_sediment %>% filter(Param == "BDE-99")
+
+```
+
+
+#### Check matrix  
+
+```{r}
+
+dat4_sediment %>%
+  count(TEXT_ID, SAMPLE_TYPE) %>%
+  full_join(dat_head3[-(1:3),], by = c("TEXT_ID" = "V4"))  
+
+```
+
+
+
+
+### b. Add lacking methods  
+
+- NOTE 2: use MATRIX_ID instead of MATRIX when making new methods  
+
+```{r}
+
+sql <- make_sql_methods3(
+  name = "DIDP/DNDP", 
+  unit = "ng/g d.w.",
+  lab = "NILU",
+  matrix = "SEDIMENT")
+
+sql
+writeLines(sql, "clipboard-1024")
+
+# add in SQL Developer
+# METHOD_ID = 39263
+
+```
+
+
+### c. Pick methods from METHOD_DEFINITIONS  
+
+
+
+```{r}
+
+df_methods_sediment_list <- list()
+
+# Metals (except Hg), PCB, BDE and more 
+df_methods_sediment_list[[1]] <- df_methods_all %>%
+  filter(LABORATORY %in% "NILU" & MATRIX %in% "SEDIMENT" & ENTERED_BY %in% "THS") %>%
+  filter(!METHOD_ID %in% 31947)
+
+# Rare earth elements   
+df_methods_sediment_list[[2]] <- df_methods_all %>%
+  filter(LABORATORY %in% "NILU" & MATRIX %in% "SEDIMENT" & ENTERED_BY %in% "DHJ")
+
+# HCB, Hg 
+df_methods_sediment_list[[3]] <- df_methods_all %>%
+  filter(METHOD_ID %in% c(27867, 27937))
+
+# 'DIDP/DNDP'
+df_methods_sediment_list[[4]] <- df_methods_all %>%
+  filter(LABORATORY %in% "NILU" & MATRIX %in% "SEDIMENT" & NAME %in% "DIDP/DNDP")
+
+# New method
+new_method <- niRvana::get_nivabase_selection("*", "METHOD_DEFINITIONS", "NAME", "DIDP/DNDP", values_are_text = TRUE)
+df_methods_sediment_list[[4]] <- new_method %>% filter(MATRIX == "SEDIMENT")
+
+
+# Combine
+df_methods_sediment <- bind_rows(df_methods_sediment_list)
+
+check <- df_methods_sediment %>%
+  add_count(NAME) %>% 
+  filter(n > 1)
+
+if (nrow(check) > 0)
+  stop("Duplicates in NAME")
+
+```
+
+
+### d. Parameters in excel data  
+
+```{r}
+
+df_parameters_sediment <- dat4_sediment %>%
+  distinct(Paramgroup, Param, Param2)
+
+```
+
+### e. Check parameters  
+```{r}
+
+check <- df_methods_sediment %>% 
+  add_count(NAME) %>%
+  filter(n > 1)
+
+if (nrow(check) > 0)
+  stop("Some 'NAME' are duplicated")
+
+df_parameters_sediment <- df_parameters_sediment %>%
+  left_join(df_methods_sediment %>% select(NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX),
+            by = c("Param2" = "NAME"))
+
+check <- df_parameters_sediment %>% 
+  filter(is.na(METHOD_ID))
+
+if (nrow(check) > 0)
+  stop("Some 'Param2' are not matched")
+
+
+```
+
+### f. Check unit  
+
+```{r}
+
+#
+# NOTE: for a better approach, see 12f!
+#
+
+table(df_parameters_sediment$UNIT)
+
+# Check 
+#    µg/g (should be metals)
+#    µg/kg + ng/g (should be non-metals)
+#
+# df_parameters_sediment %>% filter(UNIT %in% c("µg/g d.w.", "µg/g (d.w.)")) %>% pull(Param2)
+# df_parameters_sediment %>% filter(!UNIT %in% c("µg/g d.w.", "µg/g (d.w.)")) %>% pull(Param2)
+#
+
+```
+
+
+
+## 11. Sediment, add measurements  
+
+### a. Add METHOD_ID to data  
+
+```{r}
+
+check <- df_methods_sediment %>% 
+  add_count(NAME) %>%
+  filter(n > 1)
+
+if (nrow(check) > 0)
+  stop("Some 'NAME' are duplicated")
+
+dat4_sediment <- dat4_sediment %>%
+  left_join(df_methods_sediment %>% select(NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX),
+            by = c("Param2" = "NAME"))
+  # rename(SAMPLE_ID = BIOTA_SAMPLE_ID)           # not neee for sediment     
+
+```
+
+
+### b. Change values according to unit  
+
+- E.g., if the data has metals in ug/g, but the unit for the method is mg/kg    
+- Fully manual (look in the original excel sheet to know what is correct)  
+
+```{r}
+
+# Rare earth metals given in ug/g in excel, assigned ng/kg in Nivabase (through the method)    
+
+# SHOULD HAVE BEEN DONE HERE (see part 13 for example) - INSTEAD CHANGED DIRECTLY IN NIVABASE USING SQL  
+
+```
+
+
+### c. Make SQLs, add measurements    
+
+PASTE INTO SQL DEVELOPER TO ADD THE RECORDS  
+```{r}
+
+# Data frame must have
+# SLICE_ID, METHOD_ID, MATRIX, VALUE, FLAG1, APPROVED  
+
+sql_list <- 1:nrow(dat4_sediment) %>% 
+  map_chr(make_sql_sedimentchemistry_values, 
+          data = dat4_sediment)
+length(sql_list) # 1303
+
+i <- 1:length(sql_list)
+sql <- paste(sql_list[i], collapse = ";\n")
+sql <- paste0(sql, ";\n")
+writeLines(sql, "clipboard-1024")   # copies SQLs to clipboard - go to SQL Developer and paste
+                                    # "clipboard-1024" instead of "clipboard": increases avaliable
+                                    #    for the clipboard
+cat("Length of sql_list:", 
+    length(sql_list), "\n\n")
+
+cat("Two first and two last SQLs: \n\n")
+head(sql_list, 2)
+tail(sql_list, 2)
+
+```
+
+```{r}
+
+# Added erronous values to BIOTA_CHEMISTRY_VALUES
+# How to remove them!
+
+if (FALSE){
+  
+  # Get all values for today:  
+  check <- get_nivabase_data("select * from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where TRUNC(ENTERED_DATE) = TO_DATE('2023-06-08', 'yyyy-mm-dd') and ENTERED_BY = 'DHJ';")
+  check <- check %>% arrange(VALUE_ID)
+  
+  # Found first VALUE_ID to delete: 2076406
+  
+  # Check what we will delete:
+  check2 <- get_nivabase_data("select * from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where TRUNC(ENTERED_DATE) = TO_DATE('2023-06-08', 'yyyy-mm-dd') and ENTERED_BY = 'DHJ' and VALUE_ID > 2076406;")
+  
+}
+
+# Copy to SQL Developer do delete:
+# "DELETE from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where TRUNC(ENTERED_DATE) = TO_DATE('2023-06-08', 'yyyy-mm-dd') and ENTERED_BY = 'DHJ' and VALUE_ID >= 2076406;"
+
+```
+
+
+#### Check 1   
+Get Nivabasen data (measurement level)   
+```{r}
+
+table(dat4_sediment$SLICE_ID) 
+
+ids <- as.numeric(unique(dat4_sediment$SLICE_ID)) 
+
+df1 <- get_nivabase_selection(
+  "VALUE_ID, SLICE_ID, METHOD_ID, VALUE, FLAG1",
+  "SEDIMENT_CHEMISTRY_VALUES ",
+  "SLICE_ID", 
+  ids)
+
+df2 <- get_nivabase_selection(
+  "METHOD_ID, NAME, UNIT, LABORATORY, MATRIX",
+  "METHOD_DEFINITIONS",
+  "METHOD_ID", 
+  unique(df1$METHOD_ID))
+
+df1_2 <- df1 %>%
+  left_join(df2, by = "METHOD_ID")  
+
+xtabs(~MATRIX + SLICE_ID, df1_2)
+
+```
+
+#### Check 2  
+*After this check, rerun part 5 Nivadatabasen data - sediment*   
+```{r}
+
+ggplot(df1_2, aes(factor(SLICE_ID), NAME)) +
+  geom_point()
+
+```
+
+### d. Save data and method names and IDs used  
+
+```{r}
+
+fn1 <- paste0("Data/100_", string_saved_data, "_sediment.rds")
+fn2 <- paste0("Data/100_", string_saved_data, "_sediment.xlsx")
+
+saveRDS(dat4_sediment, fn1)
+writexl::write_xlsx(dat4_sediment, fn2)
+
+```
+
+
+## 12. Water, add METHOD_ID  
+
+### a. Add Param2  
+
+```{r}
+
+elements <- c("Ag", "As", "Cd", "Cr", "Cu", "Fe", 
+              "Ni", "Pb", "Sb", "Zn")
+# Except Hg!
+
+dat4_water <- dat4 %>%
+  filter(Lab %in% "NILU" & SAMPLE_TYPE %in% c("AVLØPSVANN", "FERSKVANN")) %>%
+  mutate(
+    Param2 = case_when(
+      Param %in% "PeCB" ~ "Pentachlorobenzene (PeCB)",
+      Param %in% "Traseolide" ~ "Traseolid",
+      Param %in% "TBA" ~ "Tribromoanisole (TBA)",
+      TRUE ~ Param),
+    Param2 = sub("PCB ", "PCB-", Param2, fixed = TRUE)
+  )
+
+# dat4_water %>% filter(Param == "BDE-99")
+
+table(dat4_water$SAMPLE_TYPE)
+
+```
+
+
+#### Check matrix  
+
+- The following samples are marked (in V1 or V3) as particle samples:  
+    - "NR-2021-07898", "NR-2021-07899", "NR-2021-07900", "NR-2021-07901"  
+- Also see next chunk    
+- Will be dealt with later  
+
+```{r}
+
+dat4_water_samples <- dat4_water %>%
+  count(TEXT_ID, WATER_SAMPLE_ID, SAMPLE_TYPE) %>%
+  left_join(dat_head3[-(1:3), ], by = c("TEXT_ID" = "V4")) %>%
+  select(-V2)
+
+dat4_water_samples
+
+# Particles:
+# "NR-2021-07898", "NR-2021-07899", "NR-2021-07900", "NR-2021-07901"  
+
+```
+
+
+
+#### Check uniqueness    
+
+- Also see previous chunk    
+- Will be dealt with later  
+
+```{r}
+
+check1 <- dat4_water %>%
+  add_count(TEXT_ID, Param2) %>%
+  filter(n > 1)
+
+if (nrow(check1) > 0){
+  stop("TEXT_ID have ", nrow(check1), " duplicates (for each parameter)")  
+} else {
+  message("TEXT_ID have no duplicates (for each parameter)")
+}
+ 
+check2 <- dat4_water %>%
+  add_count(WATER_SAMPLE_ID, Param2) %>%
+  filter(n > 1)
+
+cat("\n")
+message("WATER_SAMPLE_ID have ", nrow(check2), " duplicates (for each parameter)")  
+
+cat("IDs with duplicates: \n\n")
+xtabs(~WATER_SAMPLE_ID + TEXT_ID, check2)
+
+
+```
+
+### b. Add lacking methods   
+
+```{r}
+
+sql <- make_sql_methods3(
+  name = "DIDP/DNDP", 
+  unit = "ng/L",
+  lab = "NILU",
+  matrix = "WATER")
+
+sql
+writeLines(sql, "clipboard-1024")
+
+sql <- make_sql_methods3(
+  name = "Hg", 
+  unit = "µg/L",
+  lab = "NILU",
+  matrix = "WATER")
+
+sql
+writeLines(sql, "clipboard-1024")
+
+# add in SQL Developer
+# METHOD_ID = 39263
+
+```
+
+#### Add lacking particle methods   
+
+```{r}
+
+df_new_methods <- structure(
+  list(name = c("Pentachlorobenzene (PeCB)-P", "Tribromoanisole (TBA)-P", "DIDP/DNDP-P")), 
+  row.names = c(NA, -3L), class = "data.frame")
+
+sql_list <- make_sql_methods3(
+    name = df_new_methods$name, 
+    unit = "µg/L",
+    lab = "NILU",
+    matrix = "WATER")
+
+
+i <- 1:length(sql_list)
+sql <- paste(sql_list[i], collapse = "\n\n")
+sql <- paste0(sql, ";\n")
+writeLines(sql, "clipboard-1024")   # copies SQLs to clipboard - go to SQL Developer and paste
+                                    # "clipboard-1024" instead of "clipboard": increases avaliable
+                                    #    for the clipboard
+
+
+```
+
+### c. Pick methods from METHOD_DEFINITIONS  
+
+```{r}
+
+df_methods_water_list <- list()
+
+# Metals (except Hg), PCB, BDE and more 
+df_methods_water_list[[1]] <- df_methods_all %>%
+  filter(LABORATORY %in% "NILU" & MATRIX %in% "WATER" & ENTERED_BY %in% "THS") # %>%
+  # filter(!NAME %in% "Hg")   # remove HG with unit ng/L  
+
+# Rare earth elements   
+df_methods_water_list[[2]] <- df_methods_all %>%
+  filter(LABORATORY %in% "NILU" & MATRIX %in% "WATER" & ENTERED_BY %in% "DHJ")
+
+# HCB, TXP, TIPPP, Hg (with right unit)   
+df_methods_water_list[[3]] <- df_methods_all %>%
+  filter(METHOD_ID %in% c(6021, 32982, 32980))
+
+# 'DIDP/DNDP'
+df_methods_water_list[[4]] <- df_methods_all %>%
+  filter(LABORATORY %in% "NILU" & MATRIX %in% "WATER" & NAME %in% "DIDP/DNDP")
+
+# New method
+new_method <- niRvana::get_nivabase_selection("*", "METHOD_DEFINITIONS", "NAME", "DIDP/DNDP", values_are_text = TRUE)
+df_methods_water_list[[4]] <- new_method %>% filter(MATRIX == "WATER")
+
+# New Hg method, unit ug/L 
+# new_method2 <- niRvana::get_nivabase_selection("*", "METHOD_DEFINITIONS", "METHOD_ID", 39266)
+# df_methods_water_list[[5]] <- new_method2
+
+
+# Combine
+df_methods_water <- bind_rows(df_methods_water_list)
+
+
+check <- mean(df_methods_water$MATRIX %in% "WATER")
+
+if (check < 1)
+  stop("Not all matrices = WATER")
+
+check <- df_methods_water %>%
+  add_count(NAME) %>% 
+  filter(n > 1)
+
+if (nrow(check) > 0)
+  stop("Duplicates in NAME")
+
+```
+
+
+### d. Parameters in excel data  
+
+```{r}
+
+df_parameters_water <- dat4_water %>%
+  distinct(Paramgroup, Param, Param2)
+
+```
+
+
+### e. Check parameters  
+
+```{r}
+
+check <- df_methods_water %>% 
+  add_count(NAME) %>%
+  filter(n > 1)
+
+if (nrow(check) > 0)
+  stop("Some 'NAME' are duplicated")
+
+df_parameters_water <- df_parameters_water %>%
+  left_join(df_methods_water %>% select(NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX),
+            by = c("Param2" = "NAME"))
+
+check <- df_parameters_water %>% 
+  filter(is.na(METHOD_ID))
+
+if (nrow(check) > 0)
+  stop("Some 'Param2' are not matched")
+
+
+```
+
+
+
+### f. Check unit  
+
+* NOTE: 
+
+```{r}
+
+table(df_parameters_water$UNIT)
+
+# Check 
+#    µg/L (should be metals)
+#    ng/L (should be non-metals)
+#
+units1 <- c("µg/L")
+units2 <- c("ng/L")
+units_others <- setdiff(unique(df_parameters_water$UNIT), c(units1, units2))
+
+if (length(units_others) > 0)
+  stop("Not all units are included in units1 and units2")
+
+params_with_unit1 <- df_parameters_water %>% filter(UNIT %in% units1) %>% pull(Param2)
+params_with_unit2 <- df_parameters_water %>% filter(UNIT %in% units2) %>% pull(Param2)
+
+params_expected_unit1 <- c("Cr", "Fe", "Ni", "Cu", "Zn", "As", "Ag", "Cd", "Sb", "Pb")   # note: not including Hg
+params_expected_unit2 <- setdiff(unique(df_parameters_water$Param2), params_expected_unit1)
+  
+diff <- setdiff(params_with_unit1, params_expected_unit1)
+if (length(diff) > 0)
+  stop("Some parameters with unit 1 were not expected to have unit 1")  
+
+diff <- setdiff(params_with_unit2, params_expected_unit2)
+if (length(diff) > 0)
+  stop("Some parameters with unit 2 were not expected to have unit 23")  
+
+```
+
+### X. Extra for 'particle' measurements    
+
+#### Get corresponding particle methods  
+
+```{r}
+
+df_parameters_water <- df_parameters_water %>%
+  mutate(NAME_p = paste0(Param2, "-P"))
+
+df_methods_water_part <- niRvana::get_nivabase_selection(
+  "*", "METHOD_DEFINITIONS", "NAME", df_parameters_water$NAME_p, values_are_text = TRUE) %>%
+  filter(
+    LABORATORY %in% "NILU",
+    MATRIX %in% "WATER",
+    UNIT %in% c("µg/L", "ng/L", "µg/l", "ng/l")
+  )
+
+df_parameters_water_p <- df_parameters_water %>%
+  left_join(
+    df_methods_water_part %>% select(NAME, METHOD_ID_p = METHOD_ID),
+    by = c("NAME_p" = "NAME")
+  )
+
+check <- df_parameters_water_p %>% 
+  filter(is.na(METHOD_ID))
+
+if (nrow(check) > 0)
+  stop(nrow(check), " particle parameters are lacking are not matched")
+
+# For making code for adding mthods:
+# check %>% select(NAME = NAME_p) %>% as.data.frame() %>% dput() 
+
+```
+
+
+#### Check unit for particle parameters    
+
+* NOTE: 
+
+```{r}
+
+# Code as above (part f), just replacing 'df_parameters_water' with 'df_parameters_water_p'  
+
+# Check 
+#    µg/L (should be metals)
+#    ng/L (should be non-metals)
+#
+units1 <- c("µg/L")
+units2 <- c("ng/L")
+units_others <- setdiff(unique(df_parameters_water_p$UNIT), c(units1, units2))
+
+if (length(units_others) > 0)
+  stop("Not all units are included in units1 and units2")
+
+params_with_unit1 <- df_parameters_water_p %>% filter(UNIT %in% units1) %>% pull(Param2)
+params_with_unit2 <- df_parameters_water_p %>% filter(UNIT %in% units2) %>% pull(Param2)
+
+params_expected_unit1 <- c("Cr", "Fe", "Ni", "Cu", "Zn", "As", "Ag", "Cd", "Sb", "Pb")   # note: not including Hg
+params_expected_unit2 <- setdiff(unique(df_parameters_water_p$Param2), params_expected_unit1)
+  
+diff <- setdiff(params_with_unit1, params_expected_unit1)
+if (length(diff) > 0)
+  stop("Some parameters with unit 1 were not expected to have unit 1")  
+
+diff <- setdiff(params_with_unit2, params_expected_unit2)
+if (length(diff) > 0)
+  stop("Some parameters with unit 2 were not expected to have unit 23")  
+
+```
+
+
+## 13. Water, add measurements  
+
+### X. Extra for 'particle' measurements  
+
+- Create 'dat4_water_wp' and 'df_methods_water_wp'   
+- These must also be used below (use search and replace)
+
+#### Excel data  
+
+```{r}
+
+particle_samples <- c("NR-2021-07898", "NR-2021-07899", "NR-2021-07900", "NR-2021-07901")
+
+dat4_water_wp <- dat4_water %>%
+  mutate(
+    Param2 = case_when(
+      TEXT_ID %in% particle_samples ~ paste0(Param2, "-P"),
+      !TEXT_ID %in% particle_samples ~ Param2)
+  )
+  
+xtabs(~Param2, dat4_water)  %>% head(15)
+xtabs(~Param2, dat4_water_wp)  %>% head(30)
+
+
+```
+
+#### Methods  
+
+```{r}
+
+df_methods_water_wp <- bind_rows(
+  df_methods_water %>% filter(NAME %in% dat4_water$Param2),
+  df_methods_water_part %>% filter(NAME %in% dat4_water_wp$Param2)
+)
+
+```
+
+### a. Add METHOD_ID to data  
+
+```{r}
+
+check <- df_methods_water_wp %>% 
+  add_count(NAME) %>%
+  filter(n > 1)
+
+if (nrow(check) > 0)
+  stop("Some 'NAME' are duplicated")
+
+dat4_water_wp <- dat4_water_wp %>%
+  left_join(df_methods_water_wp %>% select(NAME, METHOD_ID, UNIT, LABORATORY, METHOD_REF, MATRIX),
+            by = c("Param2" = "NAME"))
+  # rename(SAMPLE_ID = BIOTA_SAMPLE_ID)           # not need for water     
+
+check <- dat4_water_wp %>% 
+  filter(is.na(METHOD_ID))
+
+if (nrow(check) > 0)
+  stop("Some 'METHOD_ID' missing")
+
+
+```
+
+
+
+#### Check uniqueness    
+
+```{r}
+
+check <- dat4_water_wp %>%
+  add_count(WATER_SAMPLE_ID, METHOD_ID) %>%
+  filter(n > 1) %>%
+  arrange(WATER_SAMPLE_ID, METHOD_ID)
+
+if (nrow(check) > 0)
+  stop("Some sample x parameter combinations are duplicated")
+
+# check <- dat4_water_wp %>%
+#   add_count(TEXT_ID, Param2) %>%
+#   filter(n > 1) %>%
+#   arrange(TEXT_ID, Param2)
+
+
+```
+
+### b. Change values according to unit  
+
+- E.g., if the data has metals in ug/g, but the unit for the method is mg/kg    
+- Fully manual (look in the original excel sheet to know what is correct)  
+- In this case: 
+    - in excel: all parameters given in ng/L, also metals 
+    - metals (except Hg) shall be changed to ug/L (following the UNIT given in the method)  
+    - the alternative would be to make new methods for metals with ng/L
+
+```{r}
+
+dat4_water_wp2 <- dat4_water_wp %>%
+  mutate(
+    VALUE = case_when(
+      Param2 %in% params_expected_unit1 ~ VALUE/1000,
+      TRUE ~ VALUE)
+  )
+
+if (FALSE){
+  
+  cowplot::plot_grid(
+    ggplot(dat4_water_wp %>% filter(Param2 %in% "Cd"), aes(TEXT_ID, VALUE)) +
+      geom_point(),
+    ggplot(dat4_water_wp2 %>% filter(Param2 %in% "Cd"), aes(TEXT_ID, VALUE)) +
+      geom_point()
+  )
+  
+}
+
+
+```
+
+
+### c. Make SQLs, add measurements    
+PASTE INTO SQL DEVELOPER TO ADD THE RECORDS  
+```{r}
+
+# Data frame must have
+# SLICE_ID, METHOD_ID, MATRIX, VALUE, FLAG1, APPROVED  
+
+sql_list <- 1:nrow(dat4_water_wp2) %>% 
+  map_chr(make_sql_waterchemistry_values, 
+          data = dat4_water_wp2)
+length(sql_list) # 1303
+
+i <- 1:length(sql_list)
+sql <- paste(sql_list[i], collapse = ";\n")
+sql <- paste0(sql, ";\n")
+writeLines(sql, "clipboard-1024")   # copies SQLs to clipboard - go to SQL Developer and paste
+                                    # "clipboard-1024" instead of "clipboard": increases avaliable
+                                    #    for the clipboard
+cat("Length of sql_list:", 
+    length(sql_list), "\n\n")
+
+cat("Two first and two last SQLs: \n\n")
+head(sql_list, 2)
+tail(sql_list, 2)
+
+```
+
+```{r}
+
+# Added to BIOTA_CHEMISTRY_VALUES this 
+
+# Get all values for today  
+# check <- get_nivabase_data("select * from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where TRUNC(ENTERED_DATE) = TO_DATE('2023-06-08', 'yyyy-mm-dd') and ENTERED_BY = 'DHJ';")
+# check <- check %>% arrange(VALUE_ID)
+
+# Found first VALUE_ID to delete: 2076406
+
+# Check what we will delete:
+# check2 <- get_nivabase_data("select * from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where TRUNC(ENTERED_DATE) = TO_DATE('2023-06-08', 'yyyy-mm-dd') and ENTERED_BY = 'DHJ' and VALUE_ID > 2076406;")
+
+# Copy to SQL Developer do delete:
+# "DELETE from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where TRUNC(ENTERED_DATE) = TO_DATE('2023-06-08', 'yyyy-mm-dd') and ENTERED_BY = 'DHJ' and VALUE_ID >= 2076406;"
+
+
+```
+
+
+#### Check 1   
+Get Nivabasen data (measurement level)   
+```{r}
+
+table(dat4_water_wp2$SLICE_ID) 
+
+ids <- as.numeric(unique(dat4_water_wp2$WATER_SAMPLE_ID)) 
+
+df1 <- get_nivabase_selection(
+  "VALUE_ID, WATER_SAMPLE_ID, METHOD_ID, VALUE, FLAG1",
+  "WATER_CHEMISTRY_VALUES ",
+  "SLICE_ID", 
+  ids)
+
+df2 <- get_nivabase_selection(
+  "METHOD_ID, NAME, UNIT, LABORATORY, MATRIX",
+  "METHOD_DEFINITIONS",
+  "METHOD_ID", 
+  unique(df1$METHOD_ID))
+
+df1_2 <- df1 %>%
+  left_join(df2, by = "METHOD_ID")  
+
+xtabs(~MATRIX + SLICE_ID, df1_2)
+
+```
+
+#### Check 2  
+
+*After this check, rerun part 5 Nivadatabasen data - water*   
+
+```{r}
+
+ggplot(df1_2, aes(factor(SLICE_ID), NAME)) +
+  geom_point()
+
+```
+
+
+### d. Save data and method names and IDs used  
+
+```{r}
+
+fn1 <- paste0("Data/100_", string_saved_data, "_water.rds")
+fn2 <- paste0("Data/100_", string_saved_data, "_water.xlsx")
+
+saveRDS(dat4_water_wp2, fn1)
+writexl::write_xlsx(dat4_water_wp2, fn2)
+
+```
+
+
+## APPENDIX 1: All matrices - LOQ given as negative values  
+
+- Minus instead of "<" in front of number    
+- All data added today and yesterday  
+- 
+
+
+```{r}
+
+#
+# Biota, check 
+#
+
+check <- get_nivabase_data("select * from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where ENTERED_DATE > (current_date - INTERVAL '1' DAY) and ENTERED_BY = 'DHJ'")  
+
+nrow(check)
+
+head(check$ENTERED_DATE)
+tail(check$ENTERED_DATE)
+
+#
+# Sediment, check 
+#
+
+check <- get_nivabase_data("select * from NIVADATABASE.SEDIMENT_CHEMISTRY_VALUES where ENTERED_DATE > (current_date - INTERVAL '1' DAY) and ENTERED_BY = 'DHJ'")  
+
+nrow(check)
+
+head(check$ENTERED_DATE)
+tail(check$ENTERED_DATE)
+
+#
+# Water, check 
+#
+
+check <- get_nivabase_data("select * from NIVADATABASE.WATER_CHEMISTRY_VALUES where ENTERED_DATE > (current_date - INTERVAL '1' DAY) and ENTERED_BY = 'DHJ'")  
+
+nrow(check)
+
+head(check$ENTERED_DATE)
+tail(check$ENTERED_DATE)
+
+if (FALSE){
+  
+  # For SQL developer
+  
+  -- IMPORTANT: change FLAG1 first 
+  UPDATE NIVADATABASE.BIOTA_CHEMISTRY_VALUES
+  SET FLAG1 = '<' where ENTERED_DATE > (current_date - INTERVAL '1' DAY) and ENTERED_BY = 'DHJ' and VALUE < 0;
+  
+  -- Then change VALUE 
+  UPDATE NIVADATABASE.BIOTA_CHEMISTRY_VALUES
+  SET VALUE = (-VALUE) where ENTERED_DATE > (current_date - INTERVAL '1' DAY) and ENTERED_BY = 'DHJ' and VALUE < 0;
+  commit;
+
+    -- IMPORTANT: change FLAG1 first 
+  UPDATE NIVADATABASE.SEDIMENT_CHEMISTRY_VALUES
+  SET FLAG1 = '<' where ENTERED_DATE > (current_date - INTERVAL '1' DAY) and ENTERED_BY = 'DHJ' and VALUE < 0;
+  
+  -- Then change VALUE 
+  UPDATE NIVADATABASE.SEDIMENT_CHEMISTRY_VALUES
+  SET VALUE = (-VALUE) where ENTERED_DATE > (current_date - INTERVAL '1' DAY) and ENTERED_BY = 'DHJ' and VALUE < 0;
+  commit;
+
+    -- IMPORTANT: change FLAG1 first 
+  UPDATE NIVADATABASE.WATER_CHEMISTRY_VALUES
+  SET FLAG1 = '<' where ENTERED_DATE > (current_date - INTERVAL '1' DAY) and ENTERED_BY = 'DHJ' and VALUE < 0;
+  
+  -- Then change VALUE 
+  UPDATE NIVADATABASE.WATER_CHEMISTRY_VALUES
+  SET VALUE = (-VALUE) where ENTERED_DATE > (current_date - INTERVAL '1' DAY) and ENTERED_BY = 'DHJ' and VALUE < 0;
+  commit;
+
+    
+  
+}
+
+```
+
+
+
+## APPENDIX 2: Value should have been changed according to UNIT  
+
+- fix using SQL after adding to database 
+- for rare earth metals, the value should be multiplied by 1000 because the excel data was given in mg/kg (for biota) instead of ug/kg      
+- biota + sediment had to be changed after addition to Nivabase  (see 9b and 11b)  
+- water was changed, see 13b  
+
+
+### Biota  
+
+```{r}
+
+#
+# All biota data inserted, including those with errors   
+#
+df1 <- get_nivabase_data("select * from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where ENTERED_DATE > (current_date - INTERVAL '1' DAY)")  
+
+df2 <- get_nivabase_selection(
+  "METHOD_ID, NAME, UNIT, LABORATORY, MATRIX",
+  "METHOD_DEFINITIONS",
+  "METHOD_ID", 
+  unique(df1$METHOD_ID))
+
+df_comb <- df1 %>%
+  left_join(df2, by = "METHOD_ID")  
+
+# xtabs(~NAME + SAMPLE_ID, df_comb) %>% head(30)
+
+#
+# What to change  
+#
+to_change_param <- dat_wide %>%
+  filter(Paramgroup == "Metals",
+         !Param %in% c("Cr", "Fe", "Ni", "Cu", "Zn", "As", "Ag", "Cd", "Sb", "Pb", "Hg")) %>%
+  pull(Param)
+
+df_to_change <- df_comb %>%
+  filter(NAME %in% to_change_param)
+
+to_change_valueid <- unique(df_to_change$VALUE_ID)
+
+check <- df_comb %>% filter(VALUE_ID %in% to_change_valueid)
+
+length(to_change_valueid)
+
+library(glue)
+
+i <- to_change_valueid
+sql <- glue("UPDATE NIVADATABASE.BIOTA_CHEMISTRY_VALUES\nSET VALUE = (VALUE*1000) WHERE VALUE_ID = {i};\n\n")
+writeLines(sql, "clipboard-1024") 
+
+
+
+```
+
+
+
+### Sediment  
+
+```{r}
+
+#
+# All data inserted, including those with errors   
+#
+df1 <- get_nivabase_data("select * from NIVADATABASE.SEDIMENT_CHEMISTRY_VALUES where ENTERED_DATE > (current_date - INTERVAL '1' DAY)")  
+
+df2 <- get_nivabase_selection(
+  "METHOD_ID, NAME, UNIT, LABORATORY, MATRIX",
+  "METHOD_DEFINITIONS",
+  "METHOD_ID", 
+  unique(df1$METHOD_ID))
+
+df_comb <- df1 %>%
+  left_join(df2, by = "METHOD_ID")  
+
+# xtabs(~NAME + SAMPLE_ID, df_comb) %>% head(30)
+
+#
+# What to change  
+#
+to_change_param <- dat_wide %>%
+  filter(Paramgroup == "Metals",
+         !Param %in% c("Cr", "Fe", "Ni", "Cu", "Zn", "As", "Ag", "Cd", "Sb", "Pb", "Hg")) %>%
+  pull(Param)
+
+df_to_change <- df_comb %>%
+  filter(NAME %in% to_change_param)
+
+to_change_valueid <- unique(df_to_change$VALUE_ID)
+
+check <- df_comb %>% filter(VALUE_ID %in% to_change_valueid)
+
+length(to_change_valueid)
+
+library(glue)
+
+i <- to_change_valueid
+sql <- glue("UPDATE NIVADATABASE.SEDIMENT_CHEMISTRY_VALUES\nSET VALUE = (VALUE*1000) WHERE VALUE_ID = {i};\n\n")
+writeLines(sql, "clipboard-1024") 
+
+```
+
+
+### Water     
+
+```{r}
+
+#
+# All data inserted, including those with errors   
+#
+df1 <- get_nivabase_data("select * from NIVADATABASE.WATER_CHEMISTRY_VALUES where ENTERED_DATE > (current_date - INTERVAL '1' DAY)")  
+
+df2 <- get_nivabase_selection(
+  "METHOD_ID, NAME, UNIT, LABORATORY, MATRIX",
+  "METHOD_DEFINITIONS",
+  "METHOD_ID", 
+  unique(df1$METHOD_ID))
+
+df_comb <- df1 %>%
+  left_join(df2, by = "METHOD_ID")  
+
+# xtabs(~NAME + SAMPLE_ID, df_comb) %>% head(30)
+
+#
+# What to change  
+#
+to_change_param <- dat_wide %>%
+  filter(Paramgroup == "Metals",
+         !Param %in% c("Cr", "Fe", "Ni", "Cu", "Zn", "As", "Ag", "Cd", "Sb", "Pb", "Hg")) %>%
+  pull(Param)
+
+df_to_change <- df_comb %>%
+  filter(NAME %in% to_change_param)
+
+to_change_valueid <- unique(df_to_change$VALUE_ID)
+
+check <- df_comb %>% filter(VALUE_ID %in% to_change_valueid)
+
+length(to_change_valueid)
+
+library(glue)
+
+i <- to_change_valueid
+sql <- glue("UPDATE NIVADATABASE.WATER_CHEMISTRY_VALUES\nSET VALUE = (VALUE*1000) WHERE VALUE_ID = {i};\n\n")
+writeLines(sql, "clipboard-1024") 
+
+```
+## APPENDIX 3: MATRIX to MATRIX_ID  
+
+```{r}
+
+# Find table with MATRIX and MATRIX_ID values  
+#
+# Using ALL_TAB_COLUMNS
+#
+
+# Find which tables that have column 'SAMPLE_NUMBER'
+get_nivabase_data("select OWNER,TABLE_NAME from ALL_TAB_COLUMNS where column_name = 'SAMPLE_NUMBER'")  
+get_nivabase_data("select OWNER,TABLE_NAME from ALL_TAB_COLUMNS where column_name = 'TEXT_ID'")  
+
+# All NIVADATABASE tables with some column name containing 'SPECIES'
+get_nivabase_data("select OWNER,TABLE_NAME from ALL_TAB_COLUMNS where column_name like '%SPECIES%' and OWNER = 'NIVADATABASE'")  
+
+# All NIVADATABASE tables starting with LABWARE
+get_nivabase_data("select OWNER,TABLE_NAME from ALL_TAB_COLUMNS where table_name like 'LABWARE%' and OWNER = 'NIVADATABASE'")  
+get_nivabase_data("select OWNER,TABLE_NAME from ALL_TAB_COLUMNS where table_name like 'WS%' and OWNER = 'NIVADATABASE'")  
+
+
+
+
+```
+
+
+
+
