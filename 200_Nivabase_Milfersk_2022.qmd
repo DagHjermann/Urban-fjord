@@ -1,5 +1,5 @@
 ---
-title: "Script 200_Nivabase_Milfersk_2021"
+title: "Script 200_Nivabase_Milfersk_2022"
 format: html
 ---
 
@@ -17,7 +17,8 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2021"
+program_year <- "Milfersk_2022"
+sampling_year <- 2022
 
 ```
 
@@ -25,7 +26,7 @@ program_year <- "Milfersk_2021"
 
 ```{r}
 
-dat_lab <- readRDS("Data/300_dat_lab_Milfersk_2021_2023-06-06.rds")
+dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2022_2023-06-22.rds")
 
 ```
 
@@ -65,7 +66,9 @@ nrow(df_stations)
 
 ```
 
-#### Get all data   
+#### Get all data    
+
+* NOTE: No water - as stations haven't been defined for the water samples (see script 100)   
 
 ```{r}
 
@@ -75,9 +78,9 @@ nrow(df_stations)
 ## Biota samples
 #
 
-df_specimens <- get_specimens_from_stationdata(df_stations, years = 2021)
+df_specimens <- get_specimens_from_stationdata(df_stations, years = sampling_year)
 message("No. of specimens, biota: ", nrow(df_specimens))
-dat_nb_biota <- get_biota_chemistry(2021, df_specimens, df_stations, report_samples = TRUE)
+dat_nb_biota <- get_biota_chemistry(sampling_year, df_specimens, df_stations, report_samples = TRUE)
 
 dat_nb_biota <- dat_nb_biota %>%
   mutate(Year = year(SAMPLE_DATE))
@@ -99,7 +102,7 @@ message("No. of samples, water: ", nrow(df_samples_water))
 # Adds "SAMPLE_TYPE", "SAMPLE_NUMBER", "DESCRIPTION" and "n_labware" from Labware
 
 # debugonce(get_water_chemistry_from_stations)
-dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), 2017:2021)
+dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), sampling_year)
 
 
 df_samples_sediment <- get_nivabase_selection(
@@ -110,7 +113,7 @@ df_samples_sediment <- get_nivabase_selection(
 )
 message("No. of samples, sediment: ", nrow(df_samples_sediment))
 
-dat_nb_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, years = 2017:2021)
+dat_nb_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, years = sampling_year)
 
 dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sediment$METHOD_ID))
 
@@ -137,10 +140,11 @@ dat_lab_biota <- get_nivabase_selection(
   c("BIOTA_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
   "LABWARE_BSID", 
   "BIOTA_SAMPLE_ID", unique(dat_nb_biota$SAMPLE_ID)) 
-dat_lab_water <- get_nivabase_selection(
-  c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_WSID", 
-  "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID)) 
+# NO WATER at this stage  
+# dat_lab_water <- get_nivabase_selection(
+#   c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
+#   "LABWARE_WSID", 
+#   "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID)) 
 dat_lab_sediment <- get_nivabase_selection(
   c("SLICE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
   "LABWARE_SLICE_ID", 
@@ -165,60 +169,13 @@ dat_lab_sediment <- get_nivabase_selection(
 # Expect this to have zero rows:
 check <- dat_lab_biota %>% add_count(BIOTA_SAMPLE_ID) %>% filter(n > 1)
 
-# but it has two rows!
-# this is no problem for the tow following reasons:  
-
-
-#
-# 1. 'Everything' is equal about those two samples, except TEXT_ID and DESCRIPTION
-#
-
-check_labware_sampletable <- dat_lab %>%
-  filter(TEXT_ID %in% check$LABWARE_TEXT_ID) %>%
-  select(TEXT_ID, DESCRIPTION, AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SAMPLED_DATE, SPECIES, TISSUE)
-
-cat("1. 'Everything' (station, date, species, tissue) is equal about those two samples, except TEXT_ID and DESCRIPTION \n")
-check_labware_sampletable %>% 
-  mutate(x = paste(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SAMPLED_DATE, SPECIES, TISSUE, sep = "//")) %>%
-  xtabs(~x, .)
-
-#
-# 2.There are actual measurement values only for either the one or the other: 
-#
-
-# Check those two rows in Labware:
-dat_lab_values <- get_nivabase_selection(
-  "ANALYSEOPPDRAG, SAMPLE_NUMBER, TEXT_ID, SAMPLED_DATE, DESCRIPTION, REPORTED_NAME, FORMATTED_ENTRY, NUMERIC_ENTRY, UNITS",
-  "LABWARE_IMPORT",
-  "TEXT_ID",
-  check$LABWARE_TEXT_ID, values_are_text = TRUE
-)
-
-# Actual measurement valules for either the one or the other  
-# (when noe measurement value, FORMATTED_ENTRY is set to 'T')  
-dat_lab_values_wide <- dat_lab_values %>%
-  select(DESCRIPTION, REPORTED_NAME, FORMATTED_ENTRY) %>%
-  pivot_wider(names_from = DESCRIPTION, values_from = FORMATTED_ENTRY) %>%
-  arrange(REPORTED_NAME)
-
-cat("2.There are actual measurement values only for either the one or the other \n")
-xtabs(~(`ØM-L-1`== "T") + (`ØM-L-BP`== "T"), dat_lab_values_wide)
-
-# The single parameter with 'T' is Cetrimodium chloride
-# dat_lab_values_wide %>% filter(`ØM-L-1`== "T" & `ØM-L-BP`== "T")
-
-
+if (nrow(check) == 0){
+  message("No duplicates of any SAMPLE_ID")
+} else {
+  stop("Duplicates of any SAMPLE_ID - see script 200_Nivabase_Milfersk_2021")
+}
 
 ```
-
-```{r}
-
-dat_lab %>%
-  filter(TEXT_ID %in% check$LABWARE_TEXT_ID) %>%
-  select(TEXT_ID, DESCRIPTION, AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SAMPLED_DATE, SPECIES, TISSUE)
-
-```
-
 
 #### Number of parameters per sample    
 
