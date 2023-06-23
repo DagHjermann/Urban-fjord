@@ -17,8 +17,8 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2022"
-sampling_year <- 2022
+program_year <- "Milfersk_2013_2022"
+sampling_year <- 2013:2022
 
 ```
 
@@ -26,7 +26,7 @@ sampling_year <- 2022
 
 ```{r}
 
-dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2022_2023-06-22.rds")
+# dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2022_2023-06-22.rds")
 
 ```
 
@@ -60,7 +60,10 @@ knitr::opts_chunk$set(results = 'hold')
 df_projects <- get_projects()   
 
 # df_stations <- get_stations_from_project("MILFERSK", exact = FALSE)
-df_stations <- get_stations_from_project("MILFERSK 2021-2025", exact = TRUE)
+df_stations1 <- get_stations_from_project("MILFERSK", exact = TRUE)
+df_stations2 <- get_stations_from_project("MILFERSK 2021-2025", exact = TRUE)
+
+df_stations <- bind_rows(df_stations1, df_stations2)
 
 nrow(df_stations)
 
@@ -75,20 +78,22 @@ nrow(df_stations)
 # Code from script 0010  
 
 # 
-## Biota samples
+## BIOTA  
 #
 
 df_specimens <- get_specimens_from_stationdata(df_stations, years = sampling_year)
 message("No. of specimens, biota: ", nrow(df_specimens))
+
 dat_nb_biota <- get_biota_chemistry(sampling_year, df_specimens, df_stations, report_samples = TRUE)
 
-dat_nb_biota <- dat_nb_biota %>%
-  mutate(Year = year(SAMPLE_DATE))
+df_specimens <- df_specimens %>% mutate(Year = year(DATE_CAUGHT))
+dat_nb_biota <- dat_nb_biota %>% mutate(Year = year(SAMPLE_DATE))
+
 
 # 421  
 
 #
-## Water samples  
+## WATER  
 #
 
 df_samples_water <- get_nivabase_selection(
@@ -104,6 +109,12 @@ message("No. of samples, water: ", nrow(df_samples_water))
 # debugonce(get_water_chemistry_from_stations)
 dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), sampling_year)
 
+df_samples_water <- df_samples_water %>% mutate(Year = year(SAMPLE_DATE))
+dat_nb_water <- dat_nb_water %>% mutate(Year = year(SAMPLE_DATE))
+
+#
+## SEDIMENT
+#
 
 df_samples_sediment <- get_nivabase_selection(
   "*",
@@ -117,12 +128,35 @@ dat_nb_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, 
 
 dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sediment$METHOD_ID))
 
+df_samples_water <- df_samples_water %>% mutate(Year = year(SAMPLE_DATE))
+
+df_samples_sediment <- df_samples_sediment %>% mutate(Year = year(SAMPLE_DATE))
 dat_nb_sediment <- dat_nb_sediment %>%
   left_join(dat_nb_sediment_methods, by = "METHOD_ID") %>%
   mutate(Year = year(SAMPLE_DATE)) 
 
 
 ```
+
+### Years  
+```{r}
+
+cat("BIOTA\n")
+table(df_specimens$Year)
+table(dat_nb_biota$Year)
+
+cat("\n===============================\n")
+cat("WATER\n")
+table(df_samples_water$Year)
+table(dat_nb_water$Year)
+
+cat("\n===============================\n")
+cat("SEDIMENT\n")
+table(df_samples_sediment$Year)
+table(dat_nb_sediment$Year)
+
+```
+
 
 ## 3. Couple Labware TEXT_ID per Nivabase SAMPLE_ID
 
