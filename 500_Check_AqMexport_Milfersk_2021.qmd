@@ -10,7 +10,7 @@ format: html
 
 ```{r}
 
-string_saved_data <- "Urbanfjord_2019-21"
+string_saved_data <- "Milfersk_2021"
 
 ```
 
@@ -52,11 +52,10 @@ lookup_samplingmethods <- read_excel("Data_from_Vannmiljo/Codes/Vannmiljø_prøv
 
 ```{r}
 
-fn <- "Data_to_Vannmiljo/Data_sent_230419_Benno/Urban_2019-21_biota-sed_LOK_6oay976.csv"
-df_stations <- read.csv2(fn)
+fn <- "Data_to_Vannmiljo/Milfersk_2021_gwme0lf.xlsx"
+df_stations <- read_excel(fn, sheet = "Vannlokaliteter")
 
-fn <- "Data_to_Vannmiljo/Data_sent_230419_Benno/Urban_2019-21_biota-sed_REG_6oay976.csv"
-dat_raw <- read.csv2(fn)
+dat_raw <- read_excel(fn, sheet = "Vannregistreringer")
 
 dat <- dat_raw %>%
   mutate(
@@ -65,6 +64,9 @@ dat <- dat_raw %>%
   left_join(
     lookup_medium %>% select(MediumID, Name) %>% rename(Medium_name = Name), 
     by = c("Medium_id" = "MediumID")) %>%
+  left_join(
+    lookup_samplingmethods %>% select(SamplingMethodID, Name) %>% rename(Sampling_name = Name), 
+    by = c("Provetakmetode_id" = "SamplingMethodID")) %>%
   left_join(
     df_stations %>% select(Kilde_id, Navn) %>% rename(Station_name = Navn), 
     by = c("Vannlok_kode" = "Kilde_id"))
@@ -83,45 +85,61 @@ dat %>%
   count(Station_name, Medium_name) %>%
   knitr::kable()
 
-```
-
-
-
-## 3. Water  
-
-### Read file   
-
-```{r}
-
-fn <- "Data_to_Vannmiljo/Data_sent_230419_Benno/Urban_2019-21_water_LOK_kovirbv.csv"
-df_stations <- read.csv2(fn)
-
-fn <- "Data_to_Vannmiljo/Data_sent_230419_Benno/Urban_2019-21_water_REG_kovirbv.csv"
-dat_raw <- read.csv2(fn)
-
-dat <- dat_raw %>%
-  mutate(
-    time = ymd(Tid_provetak),
-    year = year(time)) %>%
-  left_join(
-    lookup_medium %>% select(MediumID, Name) %>% rename(Medium_name = Name), 
-    by = c("Medium_id" = "MediumID")) %>%
-  left_join(
-    df_stations %>% select(Kilde_id, Navn) %>% rename(Station_name = Navn), 
-    by = c("Vannlok_kode" = "Kilde_id"))
-  
-
-```
-
-### Tables   
-
-```{r}
-
-# xtabs(~Vannlok_kode + Medium_id, dat)
-# xtabs(~Station_name + Medium_name, dat)
-
 dat %>%
-  count(Station_name, Medium_name) %>%
+  count(Station_name, Medium_name, Sampling_name) %>%
   knitr::kable()
 
 ```
+
+## 3. Fix  
+
+### Water sample with particle and water phase   
+
+* Where do we have such water samples?  
+    - For each of 2 samples of WWTP HIAS ('Avløpsvann og avløpsslam')   
+    - For each of 2 samples of storm water ('Hamar overvann')    
+* Example shown below for WWTP HIAS, with Hg as example    
+    - also see top row in 'All_results MILFERSK2021.xlsx' in 'Input_data\2021'    
+
+#### In Nivabase  
+
+* Particle fraction given with '-R'  
+
+```{r}
+
+library(niRvana)
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+df_stations <- get_stations_from_project("MILFERSK 2021-2025", exact = TRUE)
+df_samples_water <- get_nivabase_selection(
+  "*", "WATER_SAMPLES",
+  "STATION_ID", df_stations$STATION_ID)
+dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), 2017:2021)
+
+dat_nb_water %>%
+  filter(NAME %in% c("Hg", "Hg-P"),
+         STATION_CODE == "HIAS") %>%
+  select(WATER_SAMPLE_ID:SAMPLE_DATE, -METHOD_ID, VALUE_ID)
+
+```
+
+#### In export file  
+
+```{r}
+
+dat %>%
+  filter(Parameter_id %in% "HG",
+         Station_name == "Avløpsvann og avløpsslam",
+         Medium_name == "Avløpsvann renset") %>%
+  select(ID_lokal, Parameter_id, Medium_id, Medium_name, Provetakmetode_id, Tid_provetak, Verdi)
+
+```
+
+
+
+
+
+
+
+
