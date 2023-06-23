@@ -1,6 +1,8 @@
 #
 # get_water_chemistry_from_stations
 # 
+# IMPROVED by including VALUE_ID in the result from V_WATER_CHEMISTRY_SAMPLES 
+#   (which gives us a link to AqM export files to VM)
 
 get_water_chemistry_from_stations <- function(station_id, years, station_metadata = NULL){
   
@@ -28,7 +30,7 @@ get_water_chemistry_from_stations <- function(station_id, years, station_metadat
   
   # V_WATER_CHEMISTRY_SAMPLES - up to 359 records per station/year
   df_measurements_water_1 <- get_nivabase_selection(
-    "WATER_SAMPLE_ID, VALUE, METHOD_ID, UNIT, NAME, LABORATORY, FLAG1, APPROVED, SAMPLE_DATE, DEPTH1, DEPTH2, STATION_ID, STATION_CODE, PROJECT_ID, PARAMETER", 
+    "WATER_SAMPLE_ID, VALUE, METHOD_ID, UNIT, NAME, LABORATORY, FLAG1, APPROVED, SAMPLE_DATE, DEPTH1, DEPTH2, STATION_ID, STATION_CODE, PROJECT_ID, PARAMETER, VALUE_ID", 
     "V_WATER_CHEMISTRY_SAMPLES",
     "STATION_ID", 
     station_metadata$STATION_ID) %>%
