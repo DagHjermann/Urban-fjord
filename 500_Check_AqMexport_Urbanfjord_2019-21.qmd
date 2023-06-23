@@ -1,0 +1,127 @@
+---
+title: "500_Check_AqMexport_Urbanfjord_2019-21"
+format: html
+---
+
+
+## 1. Setup  
+
+### Settings  
+
+```{r}
+
+string_saved_data <- "Urbanfjord_2019-21"
+
+```
+
+### Packages and scripts    
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+# source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0001_Functions_sql_and_more.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+### Codes  
+
+```{r}
+
+lookup_medium <- read_excel("Data_from_Vannmiljo/Codes/Vannmiljø_medium_2023-06-23.xlsx")
+lookup_samplingmethods <- read_excel("Data_from_Vannmiljo/Codes/Vannmiljø_prøvetakingsmetoder_2023-06-23.xlsx")
+
+```
+
+
+## 2. Biota and sediments  
+
+### Read file   
+
+```{r}
+
+fn <- "Data_to_Vannmiljo/Data_sent_230419_Benno/Urban_2019-21_biota-sed_LOK_6oay976.csv"
+df_stations <- read.csv2(fn)
+
+fn <- "Data_to_Vannmiljo/Data_sent_230419_Benno/Urban_2019-21_biota-sed_REG_6oay976.csv"
+dat_raw <- read.csv2(fn)
+
+dat <- dat_raw %>%
+  mutate(
+    time = ymd(Tid_provetak),
+    year = year(time)) %>%
+  left_join(
+    lookup_medium %>% select(MediumID, Name) %>% rename(Medium_name = Name), 
+    by = c("Medium_id" = "MediumID")) %>%
+  left_join(
+    df_stations %>% select(Kilde_id, Navn) %>% rename(Station_name = Navn), 
+    by = c("Vannlok_kode" = "Kilde_id"))
+  
+
+```
+
+### Tables   
+
+```{r}
+
+# xtabs(~Vannlok_kode + Medium_id, dat)
+# xtabs(~Station_name + Medium_name, dat)
+
+dat %>%
+  count(Station_name, Medium_name) %>%
+  knitr::kable()
+
+```
+
+
+
+## 3. Water  
+
+### Read file   
+
+```{r}
+
+fn <- "Data_to_Vannmiljo/Data_sent_230419_Benno/Urban_2019-21_water_LOK_kovirbv.csv"
+df_stations <- read.csv2(fn)
+
+fn <- "Data_to_Vannmiljo/Data_sent_230419_Benno/Urban_2019-21_water_REG_kovirbv.csv"
+dat_raw <- read.csv2(fn)
+
+dat <- dat_raw %>%
+  mutate(
+    time = ymd(Tid_provetak),
+    year = year(time)) %>%
+  left_join(
+    lookup_medium %>% select(MediumID, Name) %>% rename(Medium_name = Name), 
+    by = c("Medium_id" = "MediumID")) %>%
+  left_join(
+    df_stations %>% select(Kilde_id, Navn) %>% rename(Station_name = Navn), 
+    by = c("Vannlok_kode" = "Kilde_id"))
+  
+
+```
+
+### Tables   
+
+```{r}
+
+# xtabs(~Vannlok_kode + Medium_id, dat)
+# xtabs(~Station_name + Medium_name, dat)
+
+dat %>%
+  count(Station_name, Medium_name) %>%
+  knitr::kable()
+
+```
