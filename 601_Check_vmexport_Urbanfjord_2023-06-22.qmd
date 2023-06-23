@@ -1,0 +1,110 @@
+---
+title: "600_Check_export_from_vannmiljo"
+format: html
+---
+
+## 1. Setup  
+
+### Packages and scripts    
+
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+# source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0001_Functions_sql_and_more.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+## 2. Read file   
+
+```{r}
+
+dat <- read_excel("Data_from_Vannmiljo/VM_Urbanfjord_2023-06-22.xlsx", guess_max = 80000)  
+
+dat <- dat %>%
+  rename(utm_x = `UTM33 Ost (X)`, utm_y = `UTM33 Nord (Y)`)
+
+dat <- dat %>%
+  mutate(
+    time = ymd_hms(Tid_provetak),
+    year = year(time))
+
+```
+
+### Lookup table for parameters   
+
+```{r}
+
+df_par <- read_excel("Data_from_Vannmiljo/Vannmiljo_parametre_SFS_2023-06-22.xlsx")  
+
+```
+
+
+## 3. Checks  
+
+### Stations  
+
+```{r}
+
+get_n_unique <- function(x)
+  length(unique(x))
+
+tab <- apply(dat, 2, get_n_unique)
+# tab
+# names(tab)[tab == 20] %>% paste(collapse = ", ")
+
+dat %>%
+  count(Vannlokalitet_kode, Vannlokalitet, utm_x, utm_y)
+
+```
+
+### Stations x years  
+```{r}
+
+xtabs(~Vannlokalitet + year, dat)
+
+```
+
+### Stations x medium    
+```{r}
+
+xtabs(~Vannlokalitet + Medium_navn, dat)  
+
+```
+
+## 4. Parameter groups  
+
+### Add CAS nr and group to data  
+```{r}
+
+# table(df_par$SubGroupName)  
+
+dat2 <- dat %>%
+  left_join(df_par %>% select(ParameterID, CASnr, SubGroupName),
+            by = c("Parameter_id" = "ParameterID"))
+
+table(dat2$SubGroupName)
+
+```
+
+
+### Parameter group x years  
+```{r}
+
+xtabs(~SubGroupName + year, dat2)
+
+```
+
+
