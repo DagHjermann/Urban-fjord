@@ -142,7 +142,9 @@ dat_nb_sediment <- dat_nb_sediment %>%
 ```{r}
 
 cat("BIOTA\n")
+cat("\nSpecimens:\n")
 table(df_specimens$Year)
+cat("\nMeasurements:\n")
 table(dat_nb_biota$Year)
 
 cat("\n===============================\n")
