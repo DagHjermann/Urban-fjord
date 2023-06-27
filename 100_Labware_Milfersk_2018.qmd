@@ -1,5 +1,5 @@
 ---
-title: "100_Labware_Milfersk_2021"
+title: "100_Labware_Milfersk_2019"
 format: html
 ---
 
@@ -14,7 +14,8 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2021"
+program_year <- "Milfersk_2019"
+current_year <- 2019
 
 ```
 
@@ -77,7 +78,11 @@ df_lab_all %>%
 ```{r}
 
 df_lab <- df_lab_all %>% 
-  filter(year(SAMPLED_DATE) == 2021)  
+  filter(year(SAMPLED_DATE) == current_year)  
+
+df_lab <- df_lab_all %>% 
+  filter(substr(TEXT_ID, 4,7) == current_year)  
+
 
 ```
 
@@ -94,41 +99,12 @@ df_lab %>%
 
 #### Benthic food chain     
 
-```{r}
-
-df_lab %>%
-  filter(AQUAMONITOR_NAME == "Bentisk næringskjede") %>%
-  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SPECIES, TISSUE) 
-
-```
+* None
 
 #### Overvann samples  
 
-* H1_V, H1_P = sample 1, water and particle fraction  
-* H2_V, H2_P = sample 2, water and particle fraction  
+* None
 
-```{r}
-
-df_lab %>%
-  filter(AQUAMONITOR_NAME == "Hamar overvann") %>%
-  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, DESCRIPTION) 
-
-```
-
-
-#### HIAS samples  
-
-* HIAS_S = Actual sediment  
-* HIAS1_V, HIAS1_P = sample 1, water and particle fraction
-* HIAS2_V, HIAS2_P = sample 2, water and particle fraction  
-
-```{r}
-
-df_lab %>%
-  filter(AQUAMONITOR_NAME == "Avløpsvann og avløpsslam") %>%
-  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, DESCRIPTION) 
-
-```
 
 ## 5. Save  
 
