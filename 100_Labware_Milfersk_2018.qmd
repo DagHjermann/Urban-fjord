@@ -1,0 +1,140 @@
+---
+title: "100_Labware_Milfersk_2021"
+format: html
+---
+
+## Read samples from Labware LIMS   
+- Script 100_Labware_[program]_[year]     
+- function get_labware_samples    
+- for comparing samples in Labware with samples in report, and (later) with other data   
+
+
+## 1. Settings  
+
+### For filenames  
+```{r}
+
+program_year <- "Milfersk_2021"
+
+```
+
+## 2. Packages and functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)  
+library(knitr)     # for kable
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+## 3. Get all samples  
+
+### Find projects   
+```{r}
+
+# "milfersk" mentioned in PROSJEKT    
+df_proj1 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%milfersk%'")
+
+# Samples with "17197" mentioned in PROSJEKT    
+df_proj2 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%17197%'")
+
+df_proj3 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%210136%'")
+
+proj <- unique(c(df_proj1$PROSJEKT, df_proj2$PROSJEKT, df_proj3$PROSJEKT))
+oppdrag <- unique(c(df_proj1$ANALYSEOPPDRAG, df_proj2$ANALYSEOPPDRAG, df_proj3$ANALYSEOPPDRAG))
+
+proj
+
+
+```
+
+
+### Get samples  
+```{r}
+
+# Search using ANALYSEOPPDRAG (PROEJCT is problematic due to charcters)
+df_lab_all <- get_nivabase_selection(
+  "*", "LABWARE_CHECK_SAMPLE", "ANALYSEOPPDRAG", oppdrag, values_are_text = TRUE)   
+
+df_lab_all %>%
+  count(PROSJEKT, Year_id = substr(TEXT_ID, 4,7), Year_sample = year(SAMPLED_DATE))
+
+```
+
+## 4. Samples in current year       
+```{r}
+
+df_lab <- df_lab_all %>% 
+  filter(year(SAMPLED_DATE) == 2021)  
+
+```
+
+### Tables  
+
+#### Stations  
+```{r}
+
+df_lab %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME) 
+
+```
+
+
+#### Benthic food chain     
+
+```{r}
+
+df_lab %>%
+  filter(AQUAMONITOR_NAME == "Bentisk næringskjede") %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SPECIES, TISSUE) 
+
+```
+
+#### Overvann samples  
+
+* H1_V, H1_P = sample 1, water and particle fraction  
+* H2_V, H2_P = sample 2, water and particle fraction  
+
+```{r}
+
+df_lab %>%
+  filter(AQUAMONITOR_NAME == "Hamar overvann") %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, DESCRIPTION) 
+
+```
+
+
+#### HIAS samples  
+
+* HIAS_S = Actual sediment  
+* HIAS1_V, HIAS1_P = sample 1, water and particle fraction
+* HIAS2_V, HIAS2_P = sample 2, water and particle fraction  
+
+```{r}
+
+df_lab %>%
+  filter(AQUAMONITOR_NAME == "Avløpsvann og avløpsslam") %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, DESCRIPTION) 
+
+```
+
+## 5. Save  
+
+```{r}
+
+fn <- paste0("Data/100_dat_lab_", program_year, "_", today(tzone = "UTC"), ".rds")
+saveRDS(df_lab, fn)
+
+```
