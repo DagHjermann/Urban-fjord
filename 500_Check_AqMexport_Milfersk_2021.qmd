@@ -3,6 +3,9 @@ title: "500_Check_AqMexport_Milfersk_2021"
 format: html
 ---
 
+* Check export file exported from Aquamonitor, for use in Vannmiljø   
+* Also chenge file if necessary
+
 
 ## 1. Setup  
 
@@ -61,12 +64,15 @@ dat <- dat_raw %>%
   mutate(
     time = ymd(Tid_provetak),
     year = year(time)) %>%
+  # Add 'Medium_name' to data  
   left_join(
     lookup_medium %>% select(MediumID, Name) %>% rename(Medium_name = Name), 
     by = c("Medium_id" = "MediumID")) %>%
+  # Add 'Sampling_name' to data  
   left_join(
     lookup_samplingmethods %>% select(SamplingMethodID, Name) %>% rename(Sampling_name = Name), 
     by = c("Provetakmetode_id" = "SamplingMethodID")) %>%
+  # Add 'Station_name' to data  
   left_join(
     df_stations %>% select(Kilde_id, Navn) %>% rename(Station_name = Navn), 
     by = c("Vannlok_kode" = "Kilde_id"))
@@ -93,13 +99,28 @@ dat %>%
 
 ## 3. Fix  
 
-### Water sample with particle and water phase   
+### Water samples with particle and water phase   
 
 * Where do we have such water samples?  
     - For each of 2 samples of WWTP HIAS ('Avløpsvann og avløpsslam')   
-    - For each of 2 samples of storm water ('Hamar overvann')    
+    - For each of 2 samples of storm water ('Hamar overvann')  
+    - Note: no sediment ('avløpsslam') taken from WWTP HIAS, see 'All_results MILFERSK2021.xlsx' in 'Input_data\2021'    
+    
+* Codes for Provetakmetode_id *should* be 
+    - Water - water fraction: 'NS-ISO 5667-6:2014-1'  
+    - Water - part. fraction: 'NS-ISO 5667-17:2008D'  
+    - For info: actual sediment from WWTP is: 'NS-ISO 5667-17:2008B'   
+    
+* Codes for Provetakmetode_id given in export file now (see below):  
+    - WWTP HIAS ('Avløpsvann og avløpsslam'): 'NS-ISO 5667-6:2014-1' for both   
+    - Hamar overvann: 'UKJENT' for both   
+
+
+### WWTP HIAS
+
 * Example shown below for WWTP HIAS, with Hg as example    
     - also see top row in 'All_results MILFERSK2021.xlsx' in 'Input_data\2021'    
+
 
 #### In Nivabase  
 
@@ -108,10 +129,18 @@ dat %>%
 ```{r}
 
 library(niRvana)
+
 source("../Milkys/991_Vannmiljo_snippets_functions.R")
 source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
 source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+source("500_Check_AqMexport_functions.R")    # Overwrites 'get_water_chemistry_from_stations' with a version that includes VALUE_ID   
+
+# debugonce(get_stations_from_project)
+
+df_projects <- get_projects()   
 df_stations <- get_stations_from_project("MILFERSK 2021-2025", exact = TRUE)
+
 df_samples_water <- get_nivabase_selection(
   "*", "WATER_SAMPLES",
   "STATION_ID", df_stations$STATION_ID)
@@ -136,7 +165,109 @@ dat %>%
 
 ```
 
+### Hamar overvann
 
+* As previous example, but station = Hamar overvann, still with Hg as example    
+    - also see top row in 'All_results MILFERSK2021.xlsx' in 'Input_data\2021'    
+
+#### In Nivabase  
+
+* Particle fraction given with '-R'  
+
+```{r}
+
+dat_nb_water %>%
+  filter(NAME %in% c("Hg", "Hg-P"),
+         STATION_CODE == "H_overvann") %>%
+  select(WATER_SAMPLE_ID:SAMPLE_DATE, -METHOD_ID, VALUE_ID)
+
+```
+
+#### In export file  
+
+```{r}
+
+dat %>%
+  filter(Parameter_id %in% "HG",
+         Station_name == "Hamar overvann") %>%
+  select(ID_lokal, Parameter_id, Medium_id, Medium_name, Provetakmetode_id, Tid_provetak, Verdi)
+
+```
+
+### Provetakmetode_id  
+
+```{r}
+
+dat %>%
+  filter(Station_name == "Avløpsvann og avløpsslam",
+         Medium_name == "Avløpsvann renset") %>%
+  xtabs(~Provetakmetode_id, .)
+
+dat %>%
+  filter(Station_name == "Hamar overvann") %>%
+  xtabs(~Provetakmetode_id, .)
+
+```
+
+
+
+### Make the change  
+
+#### Get VALUE_ID for particle phase samples  
+
+```{r}
+
+dat_nb_water_part <- dat_nb_water %>%
+  # Get rows with NAME ending with '-P'   
+  filter(grepl("-P$", NAME))
+
+# Check all
+# xtabs(~NAME, dat_nb_water_part)
+
+# Check some
+xtabs(~NAME, dat_nb_water_part) %>% head(5)
+
+VALUE_ID_part <- unique(dat_nb_water_part$VALUE_ID)
+ID_lokal_part <- paste0("NIVA@WC@", VALUE_ID_part)
+
+cat("\n")
+
+# Check 1
+cat("Some of the 'ID_lokal' values: \n")
+head(ID_lokal_part)  
+
+cat("\n")
+
+cat("Number of values to change: \n")
+nrow(dat_nb_water_part)
+length(ID_lokal_part)  
+
+```
+
+#### Change dat  
+
+```{r}
+
+cat("----------------------------------------------------------------------------------------------------------------------------------------\n")
+cat("Before correction: \n")
+cat("----------------------------------------------------------------------------------------------------------------------------------------\n")
+xtabs(~Station_name + Provetakmetode_id, dat)
+
+dat_revised <- dat %>%
+  mutate(
+    Provetakmetode_id = case_when(
+      ID_lokal %in% ID_lokal_part ~ 'NS-ISO 5667-17:2008D',         # all particle-phase (WWTP and 'Hamar overvann' )
+      Station_name %in% 'Hamar overvann' ~ 'NS-ISO 5667-6:2014-1',  # the rest of the samples from 'Hamar overvann' should be water phase
+      TRUE ~ Provetakmetode_id)                                     # the rest is unchanged  
+  )
+
+cat("----------------------------------------------------------------------------------------------------------------------------------------\n")
+cat("After correction: \n")
+cat("----------------------------------------------------------------------------------------------------------------------------------------\n")
+xtabs(~Station_name + Provetakmetode_id, dat_revised)
+
+  
+```
 
 
 
