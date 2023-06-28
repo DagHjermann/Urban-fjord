@@ -56,8 +56,8 @@ lookup_samplingmethods <- read_excel("Data_from_Vannmiljo/Codes/Vannmiljø_prøv
 ```{r}
 
 fn <- "Data_to_Vannmiljo/Milfersk_2021_gwme0lf.xlsx"
-df_stations <- read_excel(fn, sheet = "Vannlokaliteter")
 
+df_stations <- read_excel(fn, sheet = "Vannlokaliteter")
 dat_raw <- read_excel(fn, sheet = "Vannregistreringer")
 
 dat <- dat_raw %>%
@@ -270,6 +270,35 @@ xtabs(~Station_name + Provetakmetode_id, dat_revised)
 ```
 
 
+### Write to excel  
+```{r}
+
+
+dat_revised_orig_columns <- dat_revised %>%
+  select(-time, -year, -Medium_name, -Sampling_name, -Station_name)  
+
+if (ncol(dat_revised_orig_columns) != ncol(dat_raw)){
+  stop("The number of columns has changed")
+}
+
+check_names <- names(dat_revised_orig_columns) == names(dat_raw)
+if (mean(check_names) < 1){
+  stop("The names of columns has changed")
+}
+
+if (nrow(dat_revised_orig_columns) != nrow(dat_raw)){
+  stop("The number of rows has changed")
+}
+
+fn2 <- "Data_to_Vannmiljo/Milfersk_2021_gwme0lf_revised.xlsx"
+writexl::write_xlsx(
+  list(
+    Vannlokaliteter = df_stations,
+    Vannregistreringer = dat_revised_orig_columns),
+  fn2
+)
+
+```
 
 
 
