@@ -19,9 +19,13 @@ sampling_year <- 2018
 
 ### Labware data  
 
+* Mysis: NR-2018-10628 - NR-2018-10630  
+* Zooplankton: NR-2018-10631 - NR-2018-10633
+
+
 ```{r}
 
-# dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2022_2023-06-22.rds")
+dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2018_2023-06-28.rds")
 
 ```
 
@@ -37,11 +41,15 @@ library(readxl)
 library(ggplot2)
 library(tidyr)
 library(knitr)     # for kable
+library(ggeasy)
+library(forcats)
+
 # library(fuzzyjoin)   # regex_full_join
 
 source("../Milkys/991_Vannmiljo_snippets_functions.R")
 source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
 source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0001_Functions_sql_and_more.R")
 
 knitr::opts_chunk$set(results = 'hold')
 
@@ -56,11 +64,7 @@ knitr::opts_chunk$set(results = 'hold')
 
 df_projects <- get_projects()   
 
-# df_stations <- get_stations_from_project("MILFERSK", exact = FALSE)
-df_stations1 <- get_stations_from_project("MILFERSK", exact = TRUE)
-df_stations2 <- get_stations_from_project("MILFERSK 2021-2025", exact = TRUE)
-
-df_stations <- bind_rows(df_stations1, df_stations2)
+df_stations <- get_stations_from_project("MILFERSK", exact = TRUE)
 
 nrow(df_stations)
 
@@ -107,7 +111,171 @@ df_specimens %>%
 
 ```
 
-## 3. Add specimens  
+### Get sample and measurement data  
+
+```{r}
+
+df_meth <- get_nivabase_data("select * from NIVADATABASE.METHOD_DEFINITIONS where NAME = 'PFDoDA'")
+# METHOD_ID 33759 
+
+df_val_select <- get_nivabase_data("select * from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where METHOD_ID = 33759 and ENTERED_DATE > to_date('07-06-2023', 'DD-MM-YYYY')")
+cat("df_val_select:", nrow(df_val_select), "rows \n")
+# 51 rows
+# table(df_val$ENTERED_BY)     # Roar
+# table(df_val$ENTERED_DATE)   # Added 19. July 2023  
+
+# sample_ids <- unique(df_val_select$SAMPLE_ID)
+# dput(sample_ids)
+sample_ids <- c(248738, 248739, 248787, 248740, 248741, 248788, 248742, 248743, 
+                248744, 248745, 248746, 248747, 248748, 248749, 248750, 248751, 
+                248752, 248753, 248754, 248755, 248756, 248757, 248758, 248759, 
+                248760, 248761, 248762, 248763, 248764, 248765, 248766, 248767, 
+                248768, 248769, 248770, 248771, 248772, 248773, 248774, 248775, 
+                248776, 248777, 248778, 248779, 248780, 248781, 248782, 248783, 
+                248784, 248785, 248786)
+
+# Get those samples
+df_samp <- get_nivabase_selection(
+  "*",
+  "BIOTA_SAMPLES",
+  "SAMPLE_ID",
+  sample_ids
+)
+
+cat("df_samp:", nrow(df_samp), "rows \n")
+# 51 rows
+
+# Get all values  
+# 
+df_val <- get_nivabase_selection(
+  "VALUE_ID, SAMPLE_ID, METHOD_ID, VALUE, FLAG1",                          
+  "BIOTA_CHEMISTRY_VALUES",
+  "SAMPLE_ID", 
+  sample_ids)
+
+# METHOD_ID, NAME, UNIT, LABORATORY, MATRIX, MATRIX_ID
+df_meth <- get_nivabase_selection(
+  "METHOD_ID, NAME, UNIT, LABORATORY, MATRIX, MATRIX_ID", 
+  "METHOD_DEFINITIONS",
+  "METHOD_ID", 
+  unique(df_val$METHOD_ID))
+
+df_val <- df_val %>%
+  left_join(df_meth)
+
+```
+## 3. Check im order to couple SAMPLE_ID to SPECIEMN ID  
+
+```{r}
+
+df_val %>%
+  filter(NAME %in% c("d13CVPDB", "d15NAIR")) %>%
+  select(SAMPLE_ID, NAME, VALUE) %>%
+  mutate(VALUE = round(VALUE, 2)) %>%
+  pivot_wider(id_cols = SAMPLE_ID, names_from = NAME, values_from = VALUE)
+
+# 248738:248739   # ZM-1-2
+# 248740:248741   # Mysis 1-2
+# 248742:248751   # Krøkle
+# 248752:248761   # Lågåsild
+# 248762:248776   # Ørret Mjøsa
+# 248777:248786   # Ørret Femunden
+# 248787          # ZM-3
+# 248788          # Mysis 3
+
+lookup_id <- data.frame(
+  ID = c(
+    paste0("ZM-", 1:3),
+    paste0("MM-", 1:3),
+    paste0("KM-M-", 1:10),
+    paste0("LM-M-", 1:10),
+    paste0("ØM-M-", 1:15),
+    paste0("ØF-M-", 1:10)
+    ),
+  SAMPLE_ID = c(248738:248739, 248787,
+                248740:248741, 248788,
+                248742:248751,
+                248752:248761,
+                248762:248776,
+                248777:248786)
+) %>%
+  mutate(ID = fct_inorder(factor(ID)))
+
+df_val2 <- df_val %>%
+  left_join(lookup_id)
+
+
+
+```
+### Check some data in order to compare with excel raw data
+
+* Compare with plot in scr 300  
+    - Section 3 in scr 300 - plot of BDE47  
+
+```{r}
+
+# BDE47 = 2,2',4,4'-TetBDE 
+
+# table(df_val2$NAME)
+
+df_val2 %>% 
+  filter(NAME == "2,2',4,4'-TetBDE") %>%
+  ggplot(aes(ID, VALUE, color = is.na(FLAG1))) +
+  geom_point()+ 
+  ggeasy::easy_rotate_labels("x", angle = -45)
+
+```
+
+### Check specimens  
+
+* Osmerus eperlanus = krøkle  
+* Coregonus albula = lågåsild  (lagesild)  
+* Salmo trutta = ørret   
+* STATION_ID 71086 = Mjøsa 
+LATIN_NAME          71085 71086 71088
+
+```{r}
+
+xtabs(~LATIN_NAME + STATION_ID, df_specimens)
+
+  # 71085 M_Ø Mjøsa ørret                       15
+  # 71086 M_KL Mjøsa krøkle og lågåsild         20
+  # 71088 F_Ø Femunden ørret                    10
+
+df_specimens %>%
+  select(LATIN_NAME, STATION_ID, SPECIMEN_NO, SPECIMEN_ID) %>%
+  arrange(SPECIMEN_ID, LATIN_NAME, STATION_ID, SPECIMEN_NO)
+
+# Use outpput from the above to add SPECIMEN_ID    
+lookup_id <- data.frame(
+  ID = c(
+    paste0("ZM-", 1:3),        # zooplankton
+    paste0("MM-", 1:3),        # Mysis
+    paste0("KM-M-", 1:10),     # Krøkle = Osmerus eperlanus
+    paste0("LM-M-", 1:10),     # Lågåsild = Coregonus albula
+    paste0("ØM-M-", 1:15),     # Ørret = Salmo trutta, Mjøsa
+    paste0("ØF-M-", 1:10)      # Ørret = Salmo trutta, Femunden
+    ),
+  SAMPLE_ID = c(248738:248739, 248787,
+                248740:248741, 248788,
+                248742:248751,
+                248752:248761,
+                248762:248776,
+                248777:248786),
+  SPECIMEN_ID = c(NA, NA, NA,    # not yet added to BIOTA_SINGLE_SPECIMENS (is done below)
+                  NA, NA, NA,    # not yet added to BIOTA_SINGLE_SPECIMENS (is done below)
+                  333955:333964,
+                  333965:333974,
+                  333975:333989,
+                  333990:333999)
+) %>%
+  mutate(ID = fct_inorder(factor(ID)))
+
+
+```
+
+
+## 4. Add specimens  
 
 ### From Labware
 
@@ -134,9 +302,11 @@ dat_lab %>%
   select(TEXT_ID, SAMPLED_DATE, DESCRIPTION, AQUAMONITOR_ID, AQUAMONITOR_CODE, SPECIES, TISSUE, BIOTA_SAMPLENO)
 
 ```
+
+
 ### Create data to add 
 
-* From script 100, we see that both zooplankton and Mysis are form STATION_ID 71087	(code 'M_ZM')  
+* From script 100, we see that both zooplankton and Mysis are from STATION_ID 71087	(code 'M_ZM')  
 
 ```{r}
 
@@ -160,14 +330,112 @@ unique(df_taxon_mysis$TAXONOMY_CODE_ID)
 # make_sql_single_specimen 
 # Needs columns 'DATE_CAUGHT', 'STATION_ID', 'TAXONOMY_CODE_ID', 'SPECIMEN_NO'  
 
-data.frame(
-  DATE_CAUGHT = ymd_hms("2018-08-01 00:00:00"),
+dat_specimens_to_add <- data.frame(
+  DATE_CAUGHT = ymd_hms("2018-08-01 00:00:00"),    # from the already entered specimen data in Nivabase
   STATION_ID = 71087,
-  TAXONOMY_CODE_ID = c(rep(8941, 3), rep(14089, 3)),
+  TAXONOMY_CODE_ID = c(rep(8941, 3), rep(14089, 3)),   # 3 Zooplankton epilimnion, then 3 Mysis relicta  
   SPECIMEN_NO = c(1,2,3,1,2,3)
 )
 
+dat_specimens_to_add
+
+```
+
+### Make SQL   
+
+* COPY-PASTE to SQL Developer (the code puts the SQL on the clipboard)  
+
+```{r}
+
+sql_list <- 1:nrow(dat_specimens_to_add) %>% 
+  map_chr(make_sql_single_specimen, data = dat_specimens_to_add)
+sql <- paste(sql_list, collapse = ";\n")
+sql <- paste0(sql, ";\n")  
+writeLines(sql, "clipboard")  # copies SQLs to clipboard - go to SQL Developer and paste
+
+cat("Number of SQLs: \n")
+length(sql_list)  # 9
+
+cat("\nSample of SQLs: \n")
+sql_list[1:3]
+
+```
+
+### Get the records we just added   
+
+- Also checks that the number of new records is the same as no. of SQLs  
+- Remember to **commit** in SQL developer first  
+- Use this to add the last SPECIMEN_ID
+
+```{r}
+
+if (FALSE){
+
+  # day_for_adding_records <- substr(lubridate::now(tzone = "UTC"), 1, 10)
+  day_for_adding_records <- "2023-06-28"
+  
+  dat_specimens_added <- niRvana::get_nivabase_data(paste(
+    "select DATE_CAUGHT, STATION_ID, TAXONOMY_CODE_ID, SPECIMEN_NO, SPECIMEN_ID",
+    "from NIVADATABASE.BIOTA_SINGLE_SPECIMENS",
+    "where TRUNC(ENTERED_DATE) = TO_DATE(", sQuote(day_for_adding_records), ", 'yyyy-mm-dd')", 
+    " and ENTERED_BY = 'DHJ'")
+  )
+  dat_specimens_added
+  
+  cat("Number of retrieved records: ")
+  n_records2 <- nrow(sed_methods_added_to_database)
+  n_records2
+  
+}
+
+# Use outpput from the above to add SPECIMEN_ID    
+lookup_id <- data.frame(
+  ID = c(
+    paste0("ZM-", 1:3),        # zooplankton
+    paste0("MM-", 1:3),        # Mysis
+    paste0("KM-M-", 1:10),     # Krøkle = Osmerus eperlanus
+    paste0("LM-M-", 1:10),     # Lågåsild = Coregonus albula
+    paste0("ØM-M-", 1:15),     # Ørret = Salmo trutta, Mjøsa
+    paste0("ØF-M-", 1:10)      # Ørret = Salmo trutta, Femunden
+    ),
+  SAMPLE_ID = c(248738:248739, 248787,
+                248740:248741, 248788,
+                248742:248751,
+                248752:248761,
+                248762:248776,
+                248777:248786),
+  SPECIMEN_ID = c(334032:334034,    # zooplankton
+                  334035:334037,    # Mysis
+                  333955:333964,
+                  333965:333974,
+                  333975:333989,
+                  333990:333999)
+) %>%
+  mutate(ID = fct_inorder(factor(ID)))
 
 ```
 
 
+## 5. Add to BIOTA_SAMPLES_SPECIMENS  
+
+### Make SQL   
+
+* COPY-PASTE to SQL Developer (the code puts the SQL on the clipboard)  
+
+```{r}
+
+# make_sql_samples_specimens
+
+sql_list <- 1:nrow(lookup_id) %>% 
+  map_chr(make_sql_samples_specimens, data = lookup_id)
+sql <- paste(sql_list, collapse = ";\n")
+sql <- paste0(sql, ";\n")  
+writeLines(sql, "clipboard")  # copies SQLs to clipboard - go to SQL Developer and paste
+
+cat("Number of SQLs: \n")
+length(sql_list)  # 9
+
+cat("\nSample of SQLs: \n")
+sql_list[1:3]
+
+```
