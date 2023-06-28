@@ -1,24 +1,19 @@
 ---
-title: "Script 200_Nivabase_Milfersk_2022"
+title: "Script 200_Nivabasefix_Milfersk_2018"
 format: html
 ---
 
-3b. Read data from Nivabase   
-- Script 200_Nivabase_[program]_[year]     
-- functions  
-    - get_stations_from_project_id  
-    - get_specimens_from_stationdata   
-    - get_biota_chemistry  
-    - get_water_chemistry_from_stations  
-    - get_sediment_chemistry_from_stations  
-    
+* Starting from the knowledge gotten from '200_Nivabase_Milfersk_2013-2022.qmd'  
+    - Nivabasen has only fish specimens, lacking 3 Mysis relicta and 3 Zooplankton epilimnion   
+    - Also, there are no BIOTA_SAMPLES_SPECIMENS records linking the specimens to samples  
+
 ## 1. Setup  
 
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2013_2022"
-sampling_year <- 2013:2022
+program_year <- "Milfersk_2018"
+sampling_year <- 2018
 
 ```
 
@@ -55,6 +50,8 @@ knitr::opts_chunk$set(results = 'hold')
 
 ## 2.  Check existing NIVAbasen data    
 
+### Projects  
+
 ```{r}
 
 df_projects <- get_projects()   
@@ -69,9 +66,13 @@ nrow(df_stations)
 
 ```
 
-#### Get all data    
+### Specimens      
 
-* NOTE: No water - as stations haven't been defined for the water samples (see script 100)   
+* Data on specimens   
+    - Has fish specimens  
+    - Lacking 3 Mysis relicta and 3 Zooplankton epilimnion  
+* Also, there are no BIOTA_SAMPLES_SPECIMENS records linking the specimens to samples  
+    - We will deal with that later   
 
 ```{r}
 
@@ -84,328 +85,89 @@ nrow(df_stations)
 df_specimens <- get_specimens_from_stationdata(df_stations, years = sampling_year)
 message("No. of specimens, biota: ", nrow(df_specimens))
 
-dat_nb_biota <- get_biota_chemistry(sampling_year, df_specimens, df_stations, report_samples = TRUE)
-
 df_specimens <- df_specimens %>% mutate(Year = year(DATE_CAUGHT))
-dat_nb_biota <- dat_nb_biota %>% mutate(Year = year(SAMPLE_DATE))
+nrow(df_specimens)
 
+# debugonce(get_biota_chemistry)
+# dat_nb_biota <- get_biota_chemistry(sampling_year, df_specimens, df_stations, report_samples = TRUE)
+# FAILS because there are no links to BIOTA_SAMPLES_SPECIMENS  
 
-# 421  
+df_specimens %>%
+  left_join(df_stations, by = "STATION_ID") %>%
+  mutate(St = paste(STATION_ID, STATION_CODE, STATION_NAME)) %>%
+  xtabs(~St + DATE_CAUGHT, .)
+
 
 #
 ## WATER  
-#
-
-df_samples_water <- get_nivabase_selection(
-  "*",
-  "WATER_SAMPLES",
-  "STATION_ID",
-  df_stations$STATION_ID
-)
-message("No. of samples, water: ", nrow(df_samples_water))
-
-# Adds "SAMPLE_TYPE", "SAMPLE_NUMBER", "DESCRIPTION" and "n_labware" from Labware
-
-# debugonce(get_water_chemistry_from_stations)
-dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), sampling_year)
-
-df_samples_water <- df_samples_water %>% mutate(Year = year(SAMPLE_DATE))
-dat_nb_water <- dat_nb_water %>% mutate(Year = year(SAMPLE_DATE))
-
-#
 ## SEDIMENT
 #
-
-df_samples_sediment <- get_nivabase_selection(
-  "*",
-  "SEDIMENT_SAMPLES",
-  "STATION_ID",
-  df_stations$STATION_ID
-)
-message("No. of samples, sediment: ", nrow(df_samples_sediment))
-
-dat_nb_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, years = sampling_year)
-
-dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sediment$METHOD_ID))
-
-df_samples_water <- df_samples_water %>% mutate(Year = year(SAMPLE_DATE))
-
-df_samples_sediment <- df_samples_sediment %>% mutate(Year = year(SAMPLE_DATE))
-dat_nb_sediment <- dat_nb_sediment %>%
-  left_join(dat_nb_sediment_methods, by = "METHOD_ID") %>%
-  mutate(Year = year(SAMPLE_DATE)) 
+# No such samples this year
 
 
 ```
 
-### Years  
+## 3. Add specimens  
+
+### From Labware
+
 ```{r}
 
-cat("BIOTA\n")
-cat("\nSpecimens:\n")
-table(df_specimens$Year)
-cat("\nMeasurements:\n")
-table(dat_nb_biota$Year)
+dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2018_2023-06-28.rds")
 
-cat("\n===============================\n")
-cat("WATER\n")
-table(df_samples_water$Year)
-table(dat_nb_water$Year)
+table(dat_lab$SAMPLE_TYPE)
+table(dat_lab$AQUAMONITOR_CODE)
+table(dat_lab$AQUAMONITOR_NAME)
+table(dat_lab$SPECIES)
+table(dat_lab$SAMPLED_DATE)
 
-cat("\n===============================\n")
-cat("SEDIMENT\n")
-table(df_samples_sediment$Year)
-table(dat_nb_sediment$Year)
+xtabs(~AQUAMONITOR_NAME + SPECIES, dat_lab)  
+
+dat_lab %>%
+  filter(AQUAMONITOR_NAME == "Mjøsa zooplankton og Mysis") %>%
+  arrange(TEXT_ID) %>%
+  select(TEXT_ID, SAMPLED_DATE, DESCRIPTION, AQUAMONITOR_ID, AQUAMONITOR_CODE, SPECIES, TISSUE, BIOTA_SAMPLENO)
+
+dat_lab %>%
+  filter(AQUAMONITOR_NAME == "Mjøsa zooplankton og Mysis") %>%
+  arrange(TEXT_ID) %>%
+  select(TEXT_ID, SAMPLED_DATE, DESCRIPTION, AQUAMONITOR_ID, AQUAMONITOR_CODE, SPECIES, TISSUE, BIOTA_SAMPLENO)
 
 ```
+### Create data to add 
 
-## 2x. 2018 data  
-
-* Half-imported to NIVAbase by Roar  
-* Turns iour 
-
-### a. Stations, all years   
-
-* Based on 'df_specimens'  
+* From script 100, we see that both zooplankton and Mysis are form STATION_ID 71087	(code 'M_ZM')  
 
 ```{r}
-
-df_specimens %>% 
-  left_join(
-    df_stations %>% select(STATION_ID, STATION_CODE, STATION_NAME)
-    ) %>%
-  mutate(Station = paste(STATION_ID, STATION_CODE, STATION_NAME)) %>%
-  xtabs(~Station + Year, .)
-
-```
-
-### b. 2018 only  
-
-* 45 specimens, all are fish  
-
-```{r}
-
-df_specimens %>%
-  filter(Year == 2018) %>%
-  nrow() %>%
-  cat("specimens \n\n")
-
-df_specimens %>%
-  filter(Year == 2018) %>% 
-  left_join(
-    df_stations %>% select(STATION_ID, STATION_CODE, STATION_NAME)
-    ) %>%
-  xtabs(~SPECIMEN_NO + paste(LATIN_NAME, STATION_CODE), .)
-
-```
-
-
-### c. Look for rows in BIOTA_SAMPLES_SPECIMENS  
-
-```{r}
-
-id_spec <- df_specimens %>%
-  filter(Year == 2018) %>%
-  pull(SPECIMEN_ID)
-cat(length(id_spec), "specimens \n\n")
-
-
-# Coregonus albula = lagesld
-# Osmerus eperlanus = krøkle
-
-cat("===============================\nCheck BIOTA_SAMPLES_SPECIMENS\n===============================\n")
-
-# Alt. 1. By ID 
-df_samp_spec <- get_nivabase_selection(
-  "*",
-  "BIOTA_SAMPLES_SPECIMENS",
-  "SPECIMEN_ID",
-  id_spec
-)
-nrow(df_samp_spec) %>% cat("rows\n")
-# zero rows  
-
-# Alt. 2. By date (specimens were added by Roar 08-06-2023)  
-df_samp_spec <- get_nivabase_data(paste(
-  "select * from NIVADATABASE.BIOTA_SAMPLES_SPECIMENS where ENTERED_BY = 'RBR'",
-  "and ENTERED_DATE > to_date('07-06-2023', 'DD-MM-YYYY')")
-)
-nrow(df_samp_spec) %>% cat("rows\n")
-# zero rows  
-
-```
-
-
-### d. Check from the other side, BIOTA_CHEMISTRY_VALUES     
-
-* As it seems that Roar have imported them   
-* Check one example substance, based on entered date  
-    - 51 measurements  
-    - from excel original data, we see that these are the 45 from fish + 3 'zooplankton' + 3 Mysis  
-
-```{r}
-
-df_meth <- get_nivabase_data("select * from NIVADATABASE.METHOD_DEFINITIONS where NAME = 'PFDoDA'")
-# METHOD_ID 33759 
-
-df_val <- get_nivabase_data("select * from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where METHOD_ID = 33759 and ENTERED_DATE > to_date('07-06-2023', 'DD-MM-YYYY')")
-cat("df_val:", nrow(df_val), "rows \n")
-# 51 rows
-# table(df_val$ENTERED_BY)     # Roar
-# table(df_val$ENTERED_DATE)   # Added 19. July 2023  
-
-# Get those samples
-df_samp <- get_nivabase_selection(
-  "*",
-  "BIOTA_SAMPLES",
-  "SAMPLE_ID",
-  unique(df_val$SAMPLE_ID)
-)
-cat("df_samp:", nrow(df_samp), "rows \n")
-# 51 rows
-
-df_samp_spec <- get_nivabase_selection(
-  "*",
-  "BIOTA_SAMPLES_SPECIMENS",
-  "SAMPLE_ID",
-  unique(df_val$SAMPLE_ID)
-)
-cat("df_samp_spec:", nrow(df_samp_spec), "rows \n")
-
-```
-
-### e. Check how to add Zooplankton epilimnion     
-
-* Coupling BIOTA_SINGLE_SPECIMENS -> TAXONOMY_CODES -> TAXONOMY  
-    - 1 to 2: link = TAXONOMY_CODE_ID
-    - 2 to 3: link = NIVA_TAXON_ID  
-
-```{r}
-
-#
-# "Chironomidae" (used in 2021) has 1 row in TAXONOMY
-#
-df_taxon_check <- get_nivabase_data(
-  "select * from NIVADATABASE.TAXONOMY where LATIN_NAME like '%Chironomid%'")
-#
-# But 7 rows in TAXONOMY_CODES (different stages etc.)
-#
-df_taxon_check_code <- get_nivabase_data(
-  "select * from NIVADATABASE.TAXONOMY_CODES where NIVA_TAXON_ID = 13537")
 
 #
 # Zooplankton epilimnion
 #
-df_taxon_check_code <- get_nivabase_data(
+df_taxon_zooplankton <- get_nivabase_data(
   "select * from NIVADATABASE.TAXONOMY_CODES where NAME like '%epilimn%'")
+df_taxon_zooplankton$TAXONOMY_CODE_ID
 # TAXONOMY_CODE_ID = 8941
 
-
-```
-
-
-
-## 3. Couple Labware TEXT_ID per Nivabase SAMPLE_ID
-
-### Get Labware sample ID     
-
-```{r}
-
-# get_nivabase_data("select * from NIVADATABASE.LABWARE_BSID where rownum < 6")  
-# get_nivabase_data("select * from NIVADATABASE.LABWARE_WSID where rownum < 6")  
-# get_nivabase_data("select * from NIVADATABASE.LABWARE_SLICE_ID where rownum < 6")  
-
-unique(dat_nb_biota$SAMPLE_ID)
-
-dat_lab_biota <- get_nivabase_selection(
-  c("BIOTA_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_BSID", 
-  "BIOTA_SAMPLE_ID", unique(dat_nb_biota$SAMPLE_ID)) 
-# NO WATER at this stage  
-# dat_lab_water <- get_nivabase_selection(
-#   c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-#   "LABWARE_WSID", 
-#   "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID)) 
-dat_lab_sediment <- get_nivabase_selection(
-  c("SLICE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_SLICE_ID", 
-  "SLICE_ID", unique(dat_nb_sediment$SLICE_ID)) 
-
-```
+#
+# Mysis
+#
+df_taxon_mysis <- get_nivabase_data(
+  "select * from NIVADATABASE.TAXONOMY_CODES where NAME like '%Mysis%'")
+unique(df_taxon_mysis$TAXONOMY_CODE_ID)  
+# TAXONOMY_CODE_ID = 14089
 
 
+# make_sql_single_specimen 
+# Needs columns 'DATE_CAUGHT', 'STATION_ID', 'TAXONOMY_CODE_ID', 'SPECIMEN_NO'  
 
-### Add labware TEXT_ID to the data?  
-
-* Not done, as there may be two (or more?) Labware TEXT_ID per Nivabase SAMPLE_ID   
-
-* Demonstrated for biota  
-
-* Duplicate of BIOTA_SAMPLE_ID = 247003  
-    - Labware numbers NR-2021-07918 (DESCRIPTION = ØM-L-1) and NR-2021-11104 (DESCRIPTION = ØM-L-BP)  
-    - Seems to be two rounds of analyses: Some parameters has a value for DESCRIPTION = ØM-L-1 and value = "T" fpr DESCRIPTION = ØM-L-BP, some have the other  
-
-```{r}
-
-# Expect this to have zero rows:
-check <- dat_lab_biota %>% add_count(BIOTA_SAMPLE_ID) %>% filter(n > 1)
-
-if (nrow(check) == 0){
-  message("No duplicates of any SAMPLE_ID")
-} else {
-  stop("Duplicates of any SAMPLE_ID - see script 200_Nivabase_Milfersk_2021")
-}
-
-```
-
-#### Number of parameters per sample    
-
-* n_samples = 2 for water samples  
-    - represents water and particle fractions from the same physical sample    
-    - 'Avløpsvann og avløpsslam' and 'Hamar overvann'   
-* n_samples = 3 for trout (ørret) and surface water    
-    - represents 3 physical samples      
-
-```{r}
-
-dat_nb_biota_names <- dat_nb_biota %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, name = "n_samples")
-df1 <- dat_nb_biota_names %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, n_samples)
-# df1
-
-dat_nb_water_names <- dat_nb_water %>%
-  mutate(LATIN_NAME = NA, TISSUE_NAME = NA) %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, name = "n_samples")
-df2 <- dat_nb_water_names %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, n_samples)
-# df2
-
-dat_nb_sediment_names <- dat_nb_sediment %>%
-  mutate(LATIN_NAME = NA, TISSUE_NAME = NA) %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, name = "n_samples")
-df3 <- dat_nb_sediment_names %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, n_samples)
-# df3
-
-bind_rows(df1, df2, df3)
+data.frame(
+  DATE_CAUGHT = ymd_hms("2018-08-01 00:00:00"),
+  STATION_ID = 71087,
+  TAXONOMY_CODE_ID = c(rep(8941, 3), rep(14089, 3)),
+  SPECIMEN_NO = c(1,2,3,1,2,3)
+)
 
 
 ```
 
 
-## 4. Save  
-
-```{r}
-
-saveRDS(dat_nb_biota, paste0("Data/200_dat_nb_biota_", program_year, "_", today(), ".rds"))
-saveRDS(dat_nb_water, paste0("Data/200_dat_nb_water_", program_year, "_", today(), ".rds"))
-saveRDS(dat_nb_sediment, paste0("Data/200_dat_nb_sediment_", program_year, "_", today(), ".rds"))
-
-if (FALSE){
-  files <- dir("Data", "200_dat_nb_sediment_", full.names = TRUE) %>% sort(decreasing = TRUE)
-  dat_nb_sediment <- readRDS(files[1])
-  table(dat_nb_sediment$SLICE_ID)
-}
-
-```
