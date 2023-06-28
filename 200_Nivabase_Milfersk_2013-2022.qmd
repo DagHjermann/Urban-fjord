@@ -159,6 +159,151 @@ table(dat_nb_sediment$Year)
 
 ```
 
+## 2x. 2018 data  
+
+* Half-imported to NIVAbase by Roar  
+* Turns iour 
+
+### a. Stations, all years   
+
+* Based on 'df_specimens'  
+
+```{r}
+
+df_specimens %>% 
+  left_join(
+    df_stations %>% select(STATION_ID, STATION_CODE, STATION_NAME)
+    ) %>%
+  mutate(Station = paste(STATION_ID, STATION_CODE, STATION_NAME)) %>%
+  xtabs(~Station + Year, .)
+
+```
+
+### b. 2018 only  
+
+* 45 specimens, all are fish  
+
+```{r}
+
+df_specimens %>%
+  filter(Year == 2018) %>%
+  nrow() %>%
+  cat("specimens \n\n")
+
+df_specimens %>%
+  filter(Year == 2018) %>% 
+  left_join(
+    df_stations %>% select(STATION_ID, STATION_CODE, STATION_NAME)
+    ) %>%
+  xtabs(~SPECIMEN_NO + paste(LATIN_NAME, STATION_CODE), .)
+
+```
+
+
+### c. Look for rows in BIOTA_SAMPLES_SPECIMENS  
+
+```{r}
+
+id_spec <- df_specimens %>%
+  filter(Year == 2018) %>%
+  pull(SPECIMEN_ID)
+cat(length(id_spec), "specimens \n\n")
+
+
+# Coregonus albula = lagesld
+# Osmerus eperlanus = krøkle
+
+cat("===============================\nCheck BIOTA_SAMPLES_SPECIMENS\n===============================\n")
+
+# Alt. 1. By ID 
+df_samp_spec <- get_nivabase_selection(
+  "*",
+  "BIOTA_SAMPLES_SPECIMENS",
+  "SPECIMEN_ID",
+  id_spec
+)
+nrow(df_samp_spec) %>% cat("rows\n")
+# zero rows  
+
+# Alt. 2. By date (specimens were added by Roar 08-06-2023)  
+df_samp_spec <- get_nivabase_data(paste(
+  "select * from NIVADATABASE.BIOTA_SAMPLES_SPECIMENS where ENTERED_BY = 'RBR'",
+  "and ENTERED_DATE > to_date('07-06-2023', 'DD-MM-YYYY')")
+)
+nrow(df_samp_spec) %>% cat("rows\n")
+# zero rows  
+
+```
+
+
+### d. Check from the other side, BIOTA_CHEMISTRY_VALUES     
+
+* As it seems that Roar have imported them   
+* Check one example substance, based on entered date  
+    - 51 measurements  
+    - from excel original data, we see that these are the 45 from fish + 3 'zooplankton' + 3 Mysis  
+
+```{r}
+
+df_meth <- get_nivabase_data("select * from NIVADATABASE.METHOD_DEFINITIONS where NAME = 'PFDoDA'")
+# METHOD_ID 33759 
+
+df_val <- get_nivabase_data("select * from NIVADATABASE.BIOTA_CHEMISTRY_VALUES where METHOD_ID = 33759 and ENTERED_DATE > to_date('07-06-2023', 'DD-MM-YYYY')")
+cat("df_val:", nrow(df_val), "rows \n")
+# 51 rows
+# table(df_val$ENTERED_BY)     # Roar
+# table(df_val$ENTERED_DATE)   # Added 19. July 2023  
+
+# Get those samples
+df_samp <- get_nivabase_selection(
+  "*",
+  "BIOTA_SAMPLES",
+  "SAMPLE_ID",
+  unique(df_val$SAMPLE_ID)
+)
+cat("df_samp:", nrow(df_samp), "rows \n")
+# 51 rows
+
+df_samp_spec <- get_nivabase_selection(
+  "*",
+  "BIOTA_SAMPLES_SPECIMENS",
+  "SAMPLE_ID",
+  unique(df_val$SAMPLE_ID)
+)
+cat("df_samp_spec:", nrow(df_samp_spec), "rows \n")
+
+```
+
+### e. Check how to add Zooplankton epilimnion     
+
+* Coupling BIOTA_SINGLE_SPECIMENS -> TAXONOMY_CODES -> TAXONOMY  
+    - 1 to 2: link = TAXONOMY_CODE_ID
+    - 2 to 3: link = NIVA_TAXON_ID  
+
+```{r}
+
+#
+# "Chironomidae" (used in 2021) has 1 row in TAXONOMY
+#
+df_taxon_check <- get_nivabase_data(
+  "select * from NIVADATABASE.TAXONOMY where LATIN_NAME like '%Chironomid%'")
+#
+# But 7 rows in TAXONOMY_CODES (different stages etc.)
+#
+df_taxon_check_code <- get_nivabase_data(
+  "select * from NIVADATABASE.TAXONOMY_CODES where NIVA_TAXON_ID = 13537")
+
+#
+# Zooplankton epilimnion
+#
+df_taxon_check_code <- get_nivabase_data(
+  "select * from NIVADATABASE.TAXONOMY_CODES where NAME like '%epilimn%'")
+# TAXONOMY_CODE_ID = 8941
+
+
+```
+
+
 
 ## 3. Couple Labware TEXT_ID per Nivabase SAMPLE_ID
 
