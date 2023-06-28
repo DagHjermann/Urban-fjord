@@ -1,5 +1,5 @@
 ---
-title: "300_Excel_Milfersk_2021"
+title: "300_Excel_Milfersk_2022"
 format: html
 ---
 
@@ -31,7 +31,7 @@ So actually thosre scripts should be run first
 ### Settings  
 ```{r}
 
-string_saved_data <- "Milfersk_2021"
+string_saved_data <- "Milfersk_2022"
 
 ```
 
@@ -158,7 +158,7 @@ make_sql_chemistry_values <- function(i, data){
 
 ```{r}
 
-dat_head1 <- read_excel("Input_data/2021/All_results MILFERSK2021_edit.xlsx", col_names = FALSE, n_max = 5)  
+dat_head1 <- read_excel("Input_data/", col_names = FALSE, n_max = 5)  
 dat_head2 <- t(as.matrix(dat_head1))
 # dat_head2
 # Correct TEXT_ID for Labware  
@@ -187,7 +187,7 @@ if (nrow(check) > 0)
 
 ```{r}
 
-dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2021_2023-06-06.rds")  
+dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2022_2023-06-06.rds")  
 
 ```
 
@@ -225,7 +225,7 @@ if (nrow(check2) > 0)
 
 ```{r}
 
-dat_all <- read_excel("Input_data/2021/All_results MILFERSK2021_edit.xlsx", skip = 6, col_names = FALSE, col_types = "text")  
+dat_all <- read_excel("Input_data/2022/All_results MILFERSK2021_edit.xlsx", skip = 6, col_names = FALSE, col_types = "text")  
 
 if (nrow(dat_head2) != ncol(dat_all))
   stop("Must be equal")
@@ -305,9 +305,9 @@ dat_wide %>%
 
 ```{r}
 
-dir("Data", "200_dat_nb_biota_Milfersk_2021")
+dir("Data", "200_dat_nb_biota_Milfersk_2022")
 
-dat_nb_biota <- readRDS("Data/200_dat_nb_biota_Milfersk_2021_2023-06-06.rds")
+dat_nb_biota <- readRDS("Data/200_dat_nb_biota_Milfersk_2022_2023-06-06.rds")
 
 dat_head3
 
