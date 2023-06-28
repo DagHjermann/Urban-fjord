@@ -1,5 +1,5 @@
 ---
-title: "100_Labware_Milfersk_2019"
+title: "100_Labware_Milfersk_2018"
 format: html
 ---
 
@@ -14,8 +14,8 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2019"
-current_year <- 2019
+program_year <- "Milfersk_2018"
+current_year <- 2018
 
 ```
 
