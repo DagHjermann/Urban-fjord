@@ -1,0 +1,224 @@
+---
+title: "300_Excel_Milfersk_2018"
+format: html
+---
+
+
+## Read excel data from researchers    
+
+*NOTE: also uses Labware + Nivabase data from the corresponding scripts 100 and 200*  
+So actually thosre scripts should be run first  
+
+
+- combining NIVA and NILU data (NIVA data should be in Nivabase, but is sometimes stuck in Labware)   
+- custom code per file / project  
+- save as standardized files (csv + rds)  
+
+- Also adds data to Nivabasen  
+
+- Data saved (including modified parameter name 'Value2' and METHOD_ID)  
+    - as threed dfifferent files (both rds and excel format)  
+    
+- NOTE: the data saved contains two types of errors in the actual values:  
+    - negative values for data <LOQ (see 3d and Appendix 1)  
+    - mismatch value / unit (see 9b, 11b and in particular 13b, and Appendix 2)    
+    
+- NOTE 2: use MATRIX_ID instead of MATRIX when making new methods  
+
+
+## 1. Setup  
+
+### Settings  
+```{r}
+
+string_saved_data <- "Milfersk_2018"
+
+```
+
+### Packages and scripts    
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(ggeasy)
+library(forcats)
+# library(fuzzyjoin)   # regex_full_join
+
+ source("../Milkys/991_Vannmiljo_snippets_functions.R")
+ source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+# source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0001_Functions_sql_and_more.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+#### Function for adding methods    
+
+```{r}
+
+make_sql_methods3 <- function(name, unit, lab, descr = NA, cas = NA, method = NA, matrix = NA){
+  
+  original_options <- options(useFancyQuotes = FALSE)
+  
+  txt <- paste0(
+    "insert into NIVADATABASE.METHOD_DEFINITIONS ",
+    "(NAME, DESCR, UNIT, LABORATORY, CAS, METHOD_REF, MATRIX)\n",  # \n for line shift
+    "values (",
+    ifelse(is.na(name), "NULL", sQuote(name)), ", ",
+    ifelse(is.na(descr), "NULL", sQuote(descr)), ", ",
+    ifelse(is.na(unit), "NULL", sQuote(unit)), ", ",
+    ifelse(is.na(lab), "NULL", sQuote(lab)), ", ",
+    ifelse(is.na(cas), "NULL", sQuote(cas)), ", ", 
+    ifelse(is.na(method), "NULL", sQuote(method)), ", ", 
+    ifelse(is.na(matrix), "NULL", sQuote(matrix)), 
+    ");"
+  )
+  options(original_options)
+  txt
+}
+
+
+```
+
+
+### Functions for adding measurements  
+
+```{r}
+
+# Input:
+#   Row number (in data frame)
+#   Data frame with columns SAMPLE_ID, METHOD_ID, VALUE, FLAG1  
+
+make_sql_chemistry_values <- function(i, data){
+  
+  df <- as.data.frame(data)
+  
+  original_options <- options(useFancyQuotes = FALSE)
+
+  flag <- df[i, 'FLAG1']
+  txt <- paste0("insert into NIVADATABASE.BIOTA_CHEMISTRY_VALUES ",
+                "(SAMPLE_ID, METHOD_ID, VALUE, FLAG1, APPROVED)\n",  # \n for line shift
+                "values (",
+                df[i, 'SAMPLE_ID'], ", ",
+                df[i, 'METHOD_ID'], ", ",
+                round(df[i, 'VALUE'], 6), ", ",
+                ifelse(is.na(flag), "NULL", sQuote(flag)), ", ",
+                1,
+                ")"
+  )
+  options(original_options)
+  txt
+}
+
+# Test
+# make_sql_chemistry_values(1, biota_chemistry_values_eider)
+
+
+
+make_sql_chemistry_values <- function(i, data){
+  
+  df <- as.data.frame(data)
+  
+  original_options <- options(useFancyQuotes = FALSE)
+
+  flag <- df[i, 'FLAG1']
+  txt <- paste0("insert into NIVADATABASE.BIOTA_CHEMISTRY_VALUES ",
+                "(SAMPLE_ID, METHOD_ID, VALUE, FLAG1, APPROVED)\n",  # \n for line shift
+                "values (",
+                df[i, 'SAMPLE_ID'], ", ",
+                df[i, 'METHOD_ID'], ", ",
+                round(df[i, 'VALUE'], 6), ", ",
+                ifelse(is.na(flag), "NULL", sQuote(flag)), ", ",
+                1,
+                ")"
+  )
+  options(original_options)
+  txt
+}
+
+# Test
+# make_sql_chemistry_values(1, biota_chemistry_values_eider)
+
+
+
+```
+
+## 2. Read data  
+
+### Read headers  
+
+* For column names  
+
+```{r}
+
+fn <- "Input_data/2013-2019/Milfersk/MILFERSK_2018.xlsx"
+dat_head1 <- read_excel(fn, col_names = FALSE, n_max = 7)  
+
+dat_head2 <- t(as.matrix(dat_head1))
+# dat_head2
+
+```
+### Read on wide format)  
+
+```{r}
+dat_all <- read_excel(fn, skip = 3, col_names = TRUE, col_types = "text")  
+
+names(dat_all)
+names(dat_all)[38] <- "TBA"
+names(dat_all)[39:63] <- paste0("BDE", names(dat_all)[39:63])
+
+# Remove lngth + weight
+dat_all <- dat_all[-(4:5)]
+
+```
+
+### Change to long format   
+
+* Also change < and negative numbers to FLAG1 = <  
+    - about d13C and d15N, which should be allowed to be negative....
+    
+
+```{r}
+
+# NOTE: forgetting about d13C and d15N, which should be allowed to be negative
+
+dat_raw <- dat_all %>%
+  pivot_longer(cols = c(-ID, -Matriks, -Lokasjon), names_to = "Param", values_to = "Value_chr1") %>%
+  mutate(
+    Value_chr2 = sub(",", ".", Value_chr1, fixed = TRUE),   # in case decimal coma has been used (it has) 
+    VALUE = case_when(
+      grepl("<", Value_chr2) ~ as.numeric(sub("<", "", Value_chr2)), 
+      grepl("^-", Value_chr2) ~ as.numeric(sub("-", "", Value_chr2)),
+      TRUE ~ as.numeric(Value_chr2)),
+    FLAG1 = case_when(
+      grepl("<", Value_chr2) ~ "<", 
+      grepl("^-", Value_chr2) ~ "<", 
+      TRUE ~ as.character(NA))
+    )  
+
+```
+
+## 3. Check one parameter  
+
+* pick parameter with few under LOQ
+* in order of samples  
+
+```{r}
+
+# BDE47 = 2,2',4,4'-TetBDE 
+
+dat_raw %>% 
+  filter(Param == "BDE47") %>%
+  mutate(ID = fct_inorder(factor(ID))) %>%
+  ggplot(aes(ID, VALUE, color = is.na(FLAG1))) +
+  geom_point()+ 
+  ggeasy::easy_rotate_labels("x", angle = -45)
+
+```
