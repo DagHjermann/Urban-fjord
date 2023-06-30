@@ -1,5 +1,5 @@
 ---
-title: "100_Labware_Milfersk_2018"
+title: "100_Labware_Milfersk_2017"
 format: html
 ---
 
@@ -14,8 +14,8 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2018"
-current_year <- 2018
+program_year <- "Milfersk_2017"
+current_year <- 2017
 
 ```
 
@@ -62,15 +62,19 @@ proj
 ```
 
 
-### Get samples  
+### Get samples, all    
 ```{r}
 
 # Search using ANALYSEOPPDRAG (PROEJCT is problematic due to charcters)
 df_lab_all <- get_nivabase_selection(
-  "*", "LABWARE_CHECK_SAMPLE", "ANALYSEOPPDRAG", oppdrag, values_are_text = TRUE)   
+  "*", "LABWARE_CHECK_SAMPLE", "ANALYSEOPPDRAG", oppdrag, values_are_text = TRUE) %>%
+  mutate(
+    Year_id = substr(TEXT_ID, 4,7),
+    Year_sample = year(SAMPLED_DATE))
 
-df_lab_all %>%
-  count(PROSJEKT, Year_id = substr(TEXT_ID, 4,7), Year_sample = year(SAMPLED_DATE))
+xtabs(~Year_id + Year_sample, df_lab_all) 
+
+df_lab_all
 
 ```
 
@@ -78,11 +82,7 @@ df_lab_all %>%
 ```{r}
 
 df_lab <- df_lab_all %>% 
-  filter(year(SAMPLED_DATE) == current_year)  
-
-df_lab <- df_lab_all %>% 
-  filter(substr(TEXT_ID, 4,7) == current_year)  
-
+  filter(Year_id == current_year)  
 
 ```
 
@@ -97,13 +97,31 @@ df_lab %>%
 ```
 
 
-#### Benthic food chain     
+#### Stations 
 
-* None
+```{r}
 
-#### Overvann samples  
+df_lab %>%
+  count(SAMPLE_TYPE, SPECIES, TISSUE) 
 
-* None
+``` 
+#### Stations trout     
+
+- The samples with 'Ørret lever' and 'Ørret muskel' are NR-2017-12146 - NR-2017-12151
+'
+
+```{r}
+
+df_lab %>%
+  filter(SPECIES == "Salmo trutta") %>%
+  mutate(
+    Desc = case_when(
+      substr(DESCRIPTION, 3, 3) == "-" ~ substr(DESCRIPTION, 1, 2),
+      TRUE ~ DESCRIPTION)
+  ) %>%
+  count(TISSUE, Desc) 
+
+``` 
 
 
 ## 5. Save  
