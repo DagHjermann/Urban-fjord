@@ -67,6 +67,8 @@ excel_sheets(fn)
 dat_wide1 <- read_excel(fn, sheet = "SI 2013 analysedata Vannmiljø",
                          skip = 0, col_names = TRUE, col_types = "text")  
 
+params_orig <- dat_wide1 %>% select(`d13C, ‰`:`Triklosan, ng/g vv`) %>% names()
+
 ```
 
 #### Some checking  
@@ -80,16 +82,27 @@ xtabs(~Lokaliter + addNA(Art), dat_wide1)
 
 ```
 
+#### Check tissues  
+
+* 2013: all lacking tissue. This is Muskel according to the report page 42 (Konklusjoner)  
+* PFAS matrix - only given for 2015  
 
 ```{r}
-dat_all <- read_excel(fn, skip = 3, col_names = TRUE, col_types = "text")  
 
-names(dat_all)
-names(dat_all)[38] <- "TBA"
-names(dat_all)[39:63] <- paste0("BDE", names(dat_all)[39:63])
+cat("=================================\n")
+cat("Vevstype\n")
+cat("=================================\n")
+xtabs(~addNA(Vevstype) + Art + Fangstår, dat_wide1)  
 
-# Remove lngth + weight
-dat_all <- dat_all[-(4:5)]
+cat("=================================\n")
+cat("PFAS Matrix\n")
+cat("=================================\n")
+xtabs(~`PFAS Matrix`  + Art + Fangstår, dat_wide1)  
+
+cat("=================================\n")
+cat("PFAS Matrix vs Vevstype\n")
+cat("=================================\n")
+xtabs(~`PFAS Matrix` + Vevstype + Art, dat_wide1)  
 
 ```
 
@@ -97,14 +110,20 @@ dat_all <- dat_all[-(4:5)]
 
 * Also change < and negative numbers to FLAG1 = <  
     - about d13C and d15N, which should be allowed to be negative....
+  
 
 ```{r}
 
 dat_raw1 <- dat_wide1 %>%
   select(Lokaliter, Fangstår, Art, `Latinsk navn`, `Sample-ID`, Specimen_no, Specimens,
+         Vevstype, `PFAS Matrix`,
          `d13C, ‰`:`Triklosan, ng/g vv`) %>%
   pivot_longer(
-    cols = `d13C, ‰`:`Triklosan, ng/g vv`, names_to = "Param", values_to = "Value_chr1") 
+    cols = `d13C, ‰`:`Triklosan, ng/g vv`, names_to = "Param", values_to = "Value_chr1") %>%
+  filter(!is.na(Value_chr1))
+
+dat_unit_pops <- dat_raw1 %>%
+  filter(Param %in% "Enhet, POPs")
 
 dat_raw1 <- dat_raw1 %>%
   filter(!Param %in% "Enhet, POPs")
@@ -114,7 +133,8 @@ dat_raw1 <- dat_raw1 %>%
 ### Check first character of number  
 
 * Should only be "<" or a number  
-    - with the exception of isotopes ("d13C, ‰", "d15N, ‰")
+    - with the exception of isotopes ("d13C, ‰", "d15N, ‰")  
+* No minus numbers in this data set  
 
 ```{r}
 
@@ -144,24 +164,181 @@ dat_raw <- dat_raw1 %>%
 
 nrow(dat_raw)
 
-dat_raw <- dat_raw %>%
-  filter(!is.na(VALUE))
+check <- dat_raw %>%
+  filter(is.na(VALUE))
 
-nrow(dat_raw)
+if (nrow(check) > 0)
+  stop("Some VALUE are missing even if Value_chr1 is present")
 
 ```
 
-## 3. Check one parameter  
+## 3. Fix parameter names    
 
-
-### Parameters 
+### Remove units in parameter names    
 
 ```{r}
 
-table(dat_raw$Param)
+params <- unique(dat_raw$Param)
+
+# params2 will store the edited params
+# uncomment all lines to see the stepwise progress
+
+#
+# ng/g 
+#
+
+# grep("ng/g", params, value = TRUE)
+sel <- grep("ng/g", params)
+params2 <- sub(", ng/g vv", "", params)    # start params2 (will store the edited param)
+# cbind(params[sel], params2[sel])
+params2 <- sub(" ng/g vv", "", params2)
+# cbind(params[sel], params2[sel])
+params2 <- sub(",ng/g vv", "", params2)
+# cbind(params[sel], params2[sel])
+
+#
+# mg/kg
+# Ni, Cd, Pb
+#
+# grep("mg/kg", params2, value = TRUE)
+sel <- grep("mg/kg", params2)
+# params2[sel]
+params2 <- sub(", mg/kg vv", "", params2)
+# cbind(params[sel], params2[sel])
+
+#
+# µg/kg
+# Some Hg
+#
+# grep("ng/g", params2, value = TRUE)
+sel <- grep("µg/kg", params2)
+# params2[sel]
+params2 <- sub(", µg/kg v.v.", "", params2)
+# cbind(params[sel], params2[sel])
+
+#
+# mg/g
+# Some Hg
+#
+# grep("mg/g", params2, value = TRUE)
+sel <- grep("mg/g", params2)
+# params2[sel]
+params2 <- sub(", mg/g", "", params2)
+# cbind(params[sel], params2[sel])
+
+#
+# pro mille
+#
+# grep("ng/g", params2, value = TRUE)
+sel <- grep("‰", params2)
+# params2[sel]
+params2 <- sub(", ‰", "", params2)
+# cbind(params[sel], params2[sel])
+
+lookup_param <- data.frame(Param = params, Param_new = params2, Unit = as.character(NA))  
+
+#
+# Set Unit
+#
+sel <- grep("ng/g", lookup_param$Param)
+# lookup_param$Param[sel]
+lookup_param$Unit[sel] <- "ng/g w.w."
+
+sel <- grep("mg/kg", lookup_param$Param)
+# lookup_param$Param[sel]
+lookup_param$Unit[sel] <- "mg/kg w.w."
+
+sel <- grep("mg/g", lookup_param$Param)
+# lookup_param$Param[sel]
+lookup_param$Unit[sel] <- "mg/g w.w."
+
+sel <- grep("µg/kg", lookup_param$Param)
+# lookup_param$Param[sel]
+lookup_param$Unit[sel] <- "µg/kg w.w."
+
+sel <- grep("‰", lookup_param$Param)
+lookup_param$Unit[sel] <- "‰"
+
+# Assume all the rest (all POPs) ng/g  
+# See next chunk  
+sel <- is.na(lookup_param$Unit)
+lookup_param$Unit[sel] <- "ng/g w.w."
+
+# To sheet "Names, units" in the Excel  
+# - column PFAS added by hand  
+# write.csv2(lookup_param, "clipboard", row.names = FALSE, quote = FALSE)
+
+lookup_param <- read_excel(fn, sheet = "Names, units")  
 
 ```
 
+### Check that all POPs are ng/g    
+
+* All are ng/g w.w.  
+
+```{r}
+
+tab <- xtabs(~Art + Value_chr1, dat_unit_pops)  
+
+check <- grepl("ng/g", colnames(tab))
+
+if (mean(check) < 1)
+  stop("Some POPs are not ng/g (check last line of code of previous chunk")
+
+```
+
+### Make PARAM and UNIT  
+
+```{r}
+n1 <- nrow(dat_raw)
+
+dat_raw <- dat_raw %>%
+  left_join(lookup_param %>% rename(PARAM = Param_new, UNIT = Unit))
+
+n2 <- nrow(dat_raw)
+
+if (n2 > n1)
+  stop("No of rows increased!")
+
+```
+
+## 4. Fix tissue  
+
+```{r}
+
+dat_raw <- dat_raw %>%
+  mutate(
+    TISSUE_NAME1 = case_when(
+      Fangstår == 2013 ~ "Muskel",
+      Fangstår %in% c(2014,2016) ~ Vevstype,
+      Fangstår == 2015 & Param_type %in% "PFAS" ~ `PFAS Matrix`,
+      Fangstår == 2015 & Param_type %in% "Isotoper" & is.na(Vevstype) ~ `PFAS Matrix`,
+      Fangstår == 2015 & Param_type %in% "Isotoper" & !is.na(Vevstype) ~ Vevstype,
+      Fangstår == 2015 & !Param_type %in% c("PFAS", "Isotoper") ~ Vevstype),
+    TISSUE_NAME = case_when(
+      TISSUE_NAME1 %in% "Helkropp" ~ "Hel organisme",
+      TRUE ~ TISSUE_NAME1)
+  )
+
+```
+
+### Check  
+```{r}
+
+
+cat("=================================\n")
+cat("TISSUE_NAME\n")
+cat("=================================\n")
+xtabs(~addNA(TISSUE_NAME) + Art + Fangstår, dat_raw)  
+
+check <- dat_raw %>% filter(is.na(TISSUE_NAME))
+
+```
+
+
+## 5. Check one parameter  
+
+### Plot
 
 * pick parameter with few under LOQ
 
@@ -171,9 +348,13 @@ table(dat_raw$Param)
 
 dat_raw %>% 
   filter(Param == "BDE-47") %>%
-  mutate(ID = paste(Lokaliter, Art)) %>%
+  mutate(ID = paste(Lokaliter, Art, `PFAS Matrix`)) %>%
   ggplot(aes(Year, VALUE, color = is.na(FLAG1))) +
   geom_point()+ 
   facet_wrap(vars(ID))
 
 ```
+
+
+
+
