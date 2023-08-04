@@ -53,6 +53,21 @@ dat <- dat %>%
 
 ## 3. Checks  
 
+### Activity  
+
+* All are "Miljøgifter i ferskvann (MilFersk)"   
+* Note: others are  
+    * "Miljøgifter i ferskvann" (2012)  
+    * "Kartlegging av nye miljøgifter" (2008)  
+    * All 3 are found by searching in Vannmiljø for station "Mjøsa (F)", VannlokalidtetID 44093   
+
+```{r}
+
+table(dat$Aktivitet_navn)
+
+```
+
+
 ### Stations  
 
 ```{r}

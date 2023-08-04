@@ -1,0 +1,159 @@
+---
+title: "100_Labware_Milfersk_2018"
+format: html
+---
+
+## Read samples from Labware LIMS   
+- Script 100_Labware_[program]_[year]     
+- function get_labware_samples    
+- for comparing samples in Labware with samples in report, and (later) with other data   
+
+
+## 1. Settings  
+
+### For filenames  
+```{r}
+
+# program_year <- "Milfersk_2018"
+# current_year <- 2018
+
+```
+
+## 2. Packages and functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)  
+library(knitr)     # for kable
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+## 3. Get all samples  
+
+### Find projects   
+```{r}
+
+# "milfersk" mentioned in PROSJEKT    
+df_proj1 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%milfersk%'")
+
+# Samples with "17197" mentioned in PROSJEKT    
+df_proj2 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%17197%'")
+
+df_proj3 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%210136%'")
+
+df_proj4 <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%13223%'")
+
+proj <- unique(c(df_proj1$PROSJEKT, df_proj2$PROSJEKT, df_proj3$PROSJEKT, df_proj4$PROSJEKT))
+oppdrag <- unique(c(df_proj1$ANALYSEOPPDRAG, df_proj2$ANALYSEOPPDRAG, df_proj3$ANALYSEOPPDRAG, df_proj4$ANALYSEOPPDRAG))
+
+proj
+
+
+```
+
+
+### Get samples  
+```{r}
+
+# Search using ANALYSEOPPDRAG (PROEJCT is problematic due to charcters)
+df_lab_all <- get_nivabase_selection(
+  "*", "LABWARE_CHECK_SAMPLE", "ANALYSEOPPDRAG", oppdrag, values_are_text = TRUE) %>%
+  mutate(Year_id = substr(TEXT_ID, 4,7), Year_sample = year(SAMPLED_DATE))
+
+df_lab_all %>%
+  count(PROSJEKT, Year_id)
+
+```
+
+## 3. Tables  
+
+### Stations 
+
+#### Stations all years   
+```{r}
+
+df_lab_all %>%
+  group_by(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME) %>%
+  summarize(
+    years = paste(sort(unique(Year_id)), collapse = ", "),
+    n = n()
+  )
+
+```
+
+
+#### Stations by year  
+```{r}
+
+df_lab_all %>%
+  group_by(Station = paste(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME), Year_id) %>%
+  summarize(
+    Date_given = paste0(
+      sum(!is.na(SAMPLED_DATE)), "/", length(SAMPLED_DATE)),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(names_from = Year_id, values_from = Date_given, names_sort = TRUE)
+
+
+#  count(AQUAMONITOR_NAME, Year_id = substr(TEXT_ID, 4,7), Date_given = !is.na(SAMPLED_DATE))
+  
+
+```
+
+#### Ørret (trout Salmo trutta) stations and tissues   
+
+* Station ID changed between 2018-2020 and 2021    
+* No liver samples recorded for 2019 (liver samples were taken acc. report, but for PFAS only, which is sent to NILU)  
+* Rogn and Melke should have been taken in 2020 samples (according to report)  
+* Rogn and Melke occurs in 2021 - is that correct??   
+* No Feminden in 2022 (correct?)  
+
+```{r}
+
+df_lab_all %>%
+  filter(grepl("ørret", AQUAMONITOR_NAME, ignore.case = TRUE)) %>% 
+  count(Station = paste(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME), TISSUE, Year_id) %>%
+  arrange(Year_id, Station) %>%
+  pivot_wider(names_from = Year_id, values_from = n, names_sort = TRUE)
+
+```
+
+
+#### Stations  
+```{r}
+
+df_lab %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME) 
+
+```
+
+
+#### Benthic food chain     
+
+* None
+
+#### Overvann samples  
+
+* None
+
+
+## 5. Save  
+
+```{r}
+
+fn <- paste0("Data/100_dat_lab_", program_year, "_", today(tzone = "UTC"), ".rds")
+saveRDS(df_lab, fn)
+
+```

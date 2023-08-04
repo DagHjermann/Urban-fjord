@@ -355,6 +355,13 @@ dat_raw %>%
 
 ```
 
+## 6. Save 
+
+```{r}
+
+saveRDS(dat_raw, "Data/300_dat_excel_Milfersk_2013-2016.rds")
+
+```
 
 
 

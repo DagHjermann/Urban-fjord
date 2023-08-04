@@ -137,4 +137,11 @@ df_lab %>%
 fn <- paste0("Data/100_dat_lab_", program_year, "_", today(tzone = "UTC"), ".rds")
 saveRDS(df_lab, fn)
 
+if (FALSE){
+  dir("Data", paste0("100_dat_lab_"))
+  df_lab <- readRDS("Data/100_dat_lab_Milfersk_2021_2023-06-28.rds")
+  
+}
+  
+
 ```

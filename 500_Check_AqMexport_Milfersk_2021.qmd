@@ -97,7 +97,7 @@ dat %>%
 
 ```
 
-## 3. Fix  
+## 3. Fix 'Provetakmetode_id' of water samples  
 
 ### Water samples with particle and water phase   
 
@@ -244,7 +244,9 @@ length(ID_lokal_part)
 
 ```
 
-#### Change dat  
+#### Change 'dat'   
+
+* Makes 'dat_revised'  
 
 ```{r}
 
@@ -270,9 +272,9 @@ xtabs(~Station_name + Provetakmetode_id, dat_revised)
 ```
 
 
-### Write to excel  
-```{r}
+### Write 'dat_revised' to excel  
 
+```{r}
 
 dat_revised_orig_columns <- dat_revised %>%
   select(-time, -year, -Medium_name, -Sampling_name, -Station_name)  

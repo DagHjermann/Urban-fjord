@@ -1,0 +1,104 @@
+---
+title: "350_add-data_Milfersk_2013-2016"
+format: html
+---
+
+**NOTE: Mjøsa and Femunden only, and fish only**
+
+## 1. Setup  
+
+
+### Packages and functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(knitr)     # for kable
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+## 2. Data  
+
+```{r}
+
+dat_all <- readRDS("Data/300_dat_excel_Milfersk_2013-2016.rds") 
+
+```
+
+### Do only Mjøsa and Femunden      
+
+```{r}
+
+table(dat_all$Lokaliter)
+
+dat <- dat_all %>%
+  filter(Lokaliter %in% c("Femunden", "Mjøsa"))
+
+```
+
+### Drop zooplankton, mysis and sik  
+
+```{r}
+
+dat <- dat %>% 
+  filter(!Art %in% c("Zoopl. epi.", "Zoopl. hypo.", "Zooplankton", "Mysis", "Sik"))
+
+```
+
+
+## 3.Stations  
+
+```{r}
+
+# 71085	M_Ø	Mjøsa ørret	105	
+# 71086	M_KL	Mjøsa krøkle og lågåsild	110	
+# 71087	M_ZM	Mjøsa zooplankton og Mysis	24	
+# 71088	F_Ø	Femunden ørret	70	
+
+xtabs(~Lokaliter + Art, dat)  
+
+xtabs(~`Latinsk navn` + Art, dat)  
+
+```
+
+
+### Add stations  
+
+```{r}
+
+df_stations <- read_excel("Input_data/2013-2019/Milfersk/Milfersk_fish_stations.xlsx")
+
+dat <- dat %>%
+  left_join(df_stations)
+
+```
+
+### Write datato excel  
+
+```{r}
+
+writexl::write_xlsx(
+  list(
+    Stations = df_stations,
+    Data = dat
+  ),
+  "Data/dat_milfersk_2013-2016_.ørret_krøkle_lagesild_fromR.xlsx"
+)
+
+```
+
+
+

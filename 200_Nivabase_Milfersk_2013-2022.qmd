@@ -159,10 +159,8 @@ table(dat_nb_sediment$Year)
 
 ```
 
-## 2x. 2018 data  
+## 2. Tables    
 
-* Half-imported to NIVAbase by Roar  
-* Turns iour 
 
 ### a. Stations, all years   
 
@@ -179,25 +177,6 @@ df_specimens %>%
 
 ```
 
-### b. 2018 only  
-
-* 45 specimens, all are fish  
-
-```{r}
-
-df_specimens %>%
-  filter(Year == 2018) %>%
-  nrow() %>%
-  cat("specimens \n\n")
-
-df_specimens %>%
-  filter(Year == 2018) %>% 
-  left_join(
-    df_stations %>% select(STATION_ID, STATION_CODE, STATION_NAME)
-    ) %>%
-  xtabs(~SPECIMEN_NO + paste(LATIN_NAME, STATION_CODE), .)
-
-```
 
 
 ### c. Look for rows in BIOTA_SAMPLES_SPECIMENS  

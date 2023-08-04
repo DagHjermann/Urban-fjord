@@ -8,6 +8,10 @@ format: html
 - function get_labware_samples    
 - for comparing samples in Labware with samples in report, and (later) with other data   
 
+* 2017  
+    - Has sediment + water samples  
+    - Lacking metadata for biota (can probably be inferred from report)
+
 
 ## 1. Settings  
 
