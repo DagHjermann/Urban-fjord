@@ -80,7 +80,7 @@ library(tidyr)
 source("../Milkys/991_Vannmiljo_snippets_functions.R")
 source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
 source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
-source("0110_Data_from_excel_2020-2021_functions.R")
+source("0001_Functions_sql_and_more.R")
 
 knitr::opts_chunk$set(results = 'hold')
 

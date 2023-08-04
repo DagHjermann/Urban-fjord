@@ -1,0 +1,85 @@
+---
+title: "0110_Data_2016-2018"
+author: "DHJ"
+date: "2023-03-10"
+output: html_document
+---
+
+
+
+## 1. Setup  
+
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0001_Functions_sql_and_more.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+## 2. Get Nivadatabase data  
+
+### a. Biota  
+```{r}
+
+
+
+# 
+## Biota samples
+#
+
+df_specimens <- get_specimens_from_stationdata(df_stations, years = 2016:2022)
+message("No. of specimens, biota: ", nrow(df_specimens))
+dat_nb_biota <- get_biota_chemistry(2017:2022, df_specimens, df_stations, report_samples = TRUE)
+
+dat_nb_biota <- dat_nb_biota %>%
+  mutate(Year = year(SAMPLE_DATE))
+
+
+
+```
+
+#### Check "bentisk næringskjede"  
+```{r}
+
+get_nivabase_selection("*", "PROJECTS_STATIONS", )
+73445
+
+
+```
+
+
+### b. Sediment    
+```{r}
+
+
+
+```
+
+### c. Water      
+```{r}
+
+
+
+```
+
+
+## 3. Combined sample table  
+
+```{r}
+
+```
+
+

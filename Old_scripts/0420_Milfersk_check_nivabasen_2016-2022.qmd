@@ -44,32 +44,48 @@ knitr::opts_chunk$set(results = 'hold')
 
 df_projects <- get_projects()   
 
-df_projects %>% filter(PROJECT_ID %in% c(11626, 6863))
+df_projects %>% filter(PROJECT_ID %in% c(11626, 6863, 12625))
 #  6863	Miljøgifter i store norske innsjøer, 2013. LNR: 667-2014
 # 11626	MILFERSK
+# 12625	MILFERSK 2021-2025
 
-df_stations1 <- get_stations_from_project("MILFERSK", exact = TRUE)
+df_stations1a <- get_stations_from_project("MILFERSK", exact = TRUE)
+df_stations1b <- get_stations_from_project("MILFERSK 2021-2025", exact = TRUE)
 df_stations2 <- get_stations_from_project("Miljøgifter i store norske innsjøer, 2013. LNR: 667-2014", exact = TRUE)
 
-df_stations <- bind_rows(df_stations1, df_stations2)
+df_stations <- bind_rows(df_stations1a, df_stations1b, df_stations2)
 
 nrow(df_stations)
 
 ```
-### Check sediment stations  
+
+#### Check 
+
+```{r}
+
+get_nivabase_selection("PROJECT_ID, STATION_ID, STATION_CODE, STATION_NAME, STATION_IS_ACTIVE, PROJECTS_STATION_ID", 
+        "PROJECTS_STATIONS", "STATION_ID", 73445)
+
+# project 12625  
+
+
+```
+
+
+### Check sediment stations 
 
 ```{r}
 
 sql <- paste(
   "select * from NIVADATABASE.LABWARE_CHECK_SAMPLE where lower(PROSJEKT) like '%milfersk%'",
-  "SAMPLE_TYPE = 'SEDIMENT'")
+  "AND SAMPLE_TYPE = 'SEDIMENT'")
 
-# df_lims_sed <- get_nivabase_data(sql)
+df_lims_sed <- get_nivabase_data(sql)
+df_lims_sed
 
-get_stations_from_project_id(c(73443, 73439))  
+# get_stations_from_project_id(c(73443, 73439))  
 
 ```
-
 
 ## 3. 11626	MILFERSK
 
@@ -85,6 +101,24 @@ get_nivabase_selection("*", "XACCESS", "PROJECT_ID", 11626)
 #### Get all biota data   
 - NOTE: only biota exists!
 
+```{r}
+
+# 
+## Biota samples
+#
+
+df_specimens <- get_specimens_from_stationdata(df_stations, years = 2016:2022)
+message("No. of specimens, biota: ", nrow(df_specimens))
+dat_nb_biota <- get_biota_chemistry(2017:2022, df_specimens, df_stations, report_samples = TRUE)
+
+dat_nb_biota <- dat_nb_biota %>%
+  mutate(Year = year(SAMPLE_DATE))
+
+# 3528
+
+```
+
+### Check sediment  
 ```{r}
 
 # 
@@ -212,9 +246,10 @@ xtabs(~is.na(SAMPLED_DATE) + is.na(AQUAMONITOR_NAME) + substr(TEXT_ID, 4, 7), df
 
 ```
 
+### Tabulate by lack of date and station 
 ```{r}
 
-df_lims %>%
+df_lims_tab <- df_lims %>%
   arrange(TEXT_ID) %>%
   count(Year = substr(TEXT_ID, 4, 7), 
         SAMPLE_TYPE,
@@ -230,3 +265,15 @@ df_lims %>%
 
 
 
+```{r}
+
+df_lims_tab %>% filter(Year <= 2020)
+
+```
+
+
+```{r}
+
+df_lims_tab %>% filter(Year >= 2021)
+
+```

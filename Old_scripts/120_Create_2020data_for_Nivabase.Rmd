@@ -54,6 +54,18 @@ dat_ife <- read.delim("Input_data/2020/IFE/010 LIMS numbers and data IFE.txt",
 
 ```
 
+
+## Make lists of substancs  
+
+```{r}
+
+dat_nilu %>%
+  count(Label) %>%
+  writexl::write_xlsx("Input_data/2020/Substances_NILU_urbanfjord.xlsx")
+
+```
+
+
 ## Check Labware stations      
 
 ### Check NILU data  
@@ -67,8 +79,8 @@ table(dat_nilu[,4])  %>% head(25)
 ```
 
 ### Get samples data from LIMS      
-* Based on NILU samples only  
-* Uses LABWARE_IMPORT and LABWARE_CHECK_SAMPLE to get sample information  
+* Based on NILU samples only   
+* Uses LABWARE_IMPORT and LABWARE_CHECK_SAMPLE to get sample information   
 ```{r}
 
 ids_all <- unique(dat_nilu$LIMS.NR)
@@ -134,7 +146,6 @@ df <-  get_nivabase_selection(
     extra_sql = " and REPORTED_NAME != 'Uspesifikk organisk analyse' group by ACCOUNT_NUMBER, ANALYSEOPPDRAG, SAMPLE_TYPE, DESCRIPTION, TEXT_ID, AQUAMONITOR_CODE")
 nrow(df)
 
-```
 ```
 
 

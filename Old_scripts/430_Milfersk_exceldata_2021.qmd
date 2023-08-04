@@ -138,7 +138,6 @@ dat_2 <- dat_2 %>%
     Name = sub("PCB ", "PCB-", Name, fixed = TRUE)
   )
 
-
 table(is.na(dat_2$Name))
 # table(dat_2$Name)
 
@@ -273,6 +272,16 @@ dat_names_biota_unmatched_2 <- dat_names_biota_2 %>%
   filter(is.na(METHOD_ID_so_far))
 
 ```
+
+### Save  
+
+```{r}
+
+saveRDS(dat_names_biota_2, "Data/430_dat_names_biota2.rds"
+
+```
+
+
 
 ### Manual matching    
 
