@@ -235,4 +235,13 @@ for (tissue in tissues){
 
 ```
 
+## 4. Save   
+
+```{r}
+
+saveRDS(dat_nb_biota, paste0("Data/200_dat_nb_biota_", program_year, "_", today(), ".rds"))
+saveRDS(df_specimens, paste0("Data/200_dat_nb_specimens", program_year, "_", today(), ".rds"))
+
+```
+
 
