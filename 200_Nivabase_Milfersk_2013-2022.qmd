@@ -60,10 +60,14 @@ knitr::opts_chunk$set(results = 'hold')
 df_projects <- get_projects()   
 
 # df_stations <- get_stations_from_project("MILFERSK", exact = FALSE)
-df_stations1 <- get_stations_from_project("MILFERSK", exact = TRUE)
-df_stations2 <- get_stations_from_project("MILFERSK 2021-2025", exact = TRUE)
+df_stations1 <- get_stations_from_project("MILFERSK", exact = TRUE) %>%
+  mutate(Project = "MILFERSK")
+df_stations2 <- get_stations_from_project("MILFERSK 2021-2025", exact = TRUE) %>%
+  mutate(Project = "MILFERSK 2021-2025")
+df_stations3 <- get_stations_from_project("Miljøgifter i store norske innsjøer, 2013. LNR: 667-2014", exact = TRUE) %>%
+  mutate(Project = "Store innsjøer")
 
-df_stations <- bind_rows(df_stations1, df_stations2)
+df_stations <- bind_rows(df_stations1, df_stations2, df_stations3)
 
 nrow(df_stations)
 
@@ -176,7 +180,55 @@ df_specimens %>%
   xtabs(~Station + Year, .)
 
 ```
+### b. Stations, coordinates    
 
+```{r}
+
+df_geom1 <- get_nivabase_selection(
+  "STATION_ID, GEOM_REF_ID",
+  "STATIONS",
+  "STATION_ID",
+  df_stations$STATION_ID
+)
+df_geom2 <- get_nivabase_selection(
+  "SAMPLE_POINT_ID, LONGITUDE, LATITUDE",
+  "SAMPLE_POINTS", owner = "NIVA_GEOMETRY",
+  "SAMPLE_POINT_ID",
+  df_geom1$GEOM_REF_ID
+)
+
+if (!"LONGITUDE" %in% names(df_stations))
+  df_stations <- df_stations %>%
+    left_join(df_geom1, by = "STATION_ID") %>%
+    left_join(df_geom2, by = c("GEOM_REF_ID"="SAMPLE_POINT_ID"))
+  
+ggplot(df_stations, aes(LONGITUDE, LATITUDE, color = Project)) +
+  geom_point() +
+  facet_wrap(vars(Project))
+
+writexl::write_xlsx(df_stations, "Data/600_Milfersk_stations_nivabasen.xlsx")
+
+```
+
+```{r}
+
+if (FALSE){
+  
+  library(leaflet)
+  
+  sel <- df_stations$Project == "Store innsjøer"
+  sel <- df_stations$Project == "MILFERSK"
+  sel <- df_stations$STATION_CODE %in% c("M_Ø", "M_KL", "M_")
+  sel <- grepl("Femunden", df_stations$STATION_NAME)
+  
+  leaflet() %>%
+    addTiles() %>%
+    addMarkers(lng = df_stations$LONGITUDE[sel], lat = df_stations$LATITUDE[sel], 
+               popup = paste(df_stations$STATION_CODE[sel], "<br>", df_stations$STATION_NAME[sel]))
+  
+}
+
+```
 
 
 ### c. Look for rows in BIOTA_SAMPLES_SPECIMENS  
