@@ -78,7 +78,7 @@ df_lab_all
 
 ```
 
-## 4. Samples in current year       
+## 4B. Samples in current year       
 ```{r}
 
 df_lab <- df_lab_all %>% 
@@ -122,6 +122,18 @@ df_lab %>%
   count(TISSUE, Desc) 
 
 ``` 
+
+## 4B. Find potential stations (in Nivabase)  
+
+* Project: MILFERSK(PROJECT_ID: 11626)
+
+```{r}
+
+df_proj_stat <- get_nivabase_selection("*", "PROJECTS_STATIONS", "PROJECT_ID", 11626)  
+
+```
+
+
 
 
 ## 5. Save  
