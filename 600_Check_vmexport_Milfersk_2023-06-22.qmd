@@ -9,7 +9,7 @@ format: html
 
 ```{r}
 
-string_saved_data <- "Milfersk_2021"
+# string_saved_data <- "Milfersk_2021"
 
 ```
 
