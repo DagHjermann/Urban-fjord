@@ -1,0 +1,176 @@
+---
+title: "801_Mikronor_check_watersamples"
+author: "DHJ"
+date: "2023-02-02"
+output: html_document
+---
+
+
+## Checking if Nivabasen has existing water samples with same date x station x depth combination  
+
+
+## Packages + functions  
+```{r}
+
+# library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(fuzzyjoin)   # regex_full_join
+
+knitr::opts_chunk$set(results = 'hold')
+
+old.o <- options(useFancyQuotes = FALSE)
+
+```
+
+
+## Excel data  
+
+### Read data (importmal)  
+```{r}
+
+fn <- "Input_data/Mikronor_test_Feb2023/Importmal_Intern_HW200.xlsm"
+
+excel_sheets(fn)
+
+df_station <- read_excel(fn, sheet = "Stasjon", skip = 3)  
+df_samples <- read_excel(fn, sheet = "Vannprøve", skip = 3)  
+
+```
+### Check for duplicates  
+```{r}
+
+df_samples %>%
+  add_count(METHOD_NAME, DATASOURCE_STATION_PK, SAMPLE_DATE) %>%
+  filter(n > 1) %>%
+  arrange(METHOD_NAME, DATASOURCE_STATION_PK, SAMPLE_DATE) %>%
+  select(METHOD_NAME, DATASOURCE_STATION_PK, STATION_NAME, SAMPLE_DATE, VALUE, UNIT)
+
+```
+
+### Get combinations   
+```{r}
+
+df_sample_occasions <- df_samples %>%
+  distinct(STATION_CODE, SAMPLE_DATE) %>%
+  left_join(df_station %>% select(STATION_CODE, LOKAL_PK)) %>%
+  rename(STATION_ID = LOKAL_PK)
+
+```
+
+
+## Check in Nivabasen   
+
+### Testing  
+```{r}
+
+df_test_all <- niRvana::get_nivabase_selection(
+  columns = "STATION_ID, SAMPLE_DATE, DEPTH1, DEPTH2",
+  table = "WATER_SAMPLES",
+  selection_column = "STATION_ID",
+  selection_values = 62167)
+
+df_no_samples <- niRvana::get_nivabase_selection(
+  columns = "count(*)",
+  table = "WATER_SAMPLES",
+  selection_column = "STATION_ID",
+  selection_values = 62167)
+
+df_test1 <- niRvana::get_nivabase_selection(
+  columns = "*", 
+  table = "WATER_SAMPLES", 
+  selection_column = "STATION_ID", 
+  selection_values = 62167, 
+  extra_sql = " and TRUNC(SAMPLE_DATE) = TO_DATE('04.04.2022', 'dd-mm-yyyy')")  
+
+date <- "04.04.2022"
+extra_sql <- paste0(" and TRUNC(SAMPLE_DATE) = TO_DATE(",  sQuote(date),", 'dd-mm-yyyy')")
+extra_sql
+df_test2 <- niRvana::get_nivabase_selection(
+  columns = "*", 
+  table = "WATER_SAMPLES", 
+  selection_column = "STATION_ID", 
+  selection_values = 62167, 
+  extra_sql = extra_sql)  
+
+get_nivabase_samples_count <- function(station_id, date){
+  extra_sql <- paste0(" and TRUNC(SAMPLE_DATE) = TO_DATE(",  sQuote(date),", 'dd-mm-yyyy')")
+  result <- niRvana::get_nivabase_selection(
+    columns = "*", 
+    table = "WATER_SAMPLES", 
+    selection_column = "STATION_ID", 
+    selection_values = station_id, 
+    extra_sql = extra_sql)  
+  nrow(result)
+}
+
+get_nivabase_samples_count(62167, "04.04.2022")
+
+```
+
+
+### Loop through 'df_sample_occasions'    
+```{r}
+
+# Test
+map2_int(
+  62167,
+  "04.04.2022",
+  get_nivabase_samples_count
+)
+
+# Looping through all
+sample_count <- map2_int(
+  df_sample_occasions$STATION_ID,
+  df_sample_occasions$SAMPLE_DATE,
+  get_nivabase_samples_count
+)
+
+sample_count
+
+sum(sample_count)
+
+
+```
+
+### Extra: check number of samples per staion ID  
+
+```{r}
+
+get_nivabase_samples_count_station <- function(station_id){
+  result <- niRvana::get_nivabase_selection(
+    columns = "count(*)",
+    table = "WATER_SAMPLES",
+    selection_column = "STATION_ID",
+    selection_values = station_id)
+  result 
+}
+
+stations <- unique(df_sample_occasions$STATION_ID)
+names(stations) <- stations
+
+# Looping through all
+sample_count_stations <- map_dfr(
+  stations,
+  get_nivabase_samples_count_station,
+  .id = "STATION_ID"
+)
+
+sample_count_stations %>%
+  filter(`COUNT(*)` > 0)
+
+```
+
+### Check dates of ALN1  
+```{r}
+
+df_test_all %>%
+  filter(year(SAMPLE_DATE) == 2021) %>%
+  count(SAMPLE_DATE)
+
+```
+

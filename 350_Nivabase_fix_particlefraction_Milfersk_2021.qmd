@@ -1,0 +1,158 @@
+---
+title: "450_Nivabase_fix_particlefraction_Milfersk_2021"
+format: html
+---
+
+Data from particle phase of water samples have a single ID in Nivabase, but two different IDs in Labware  
+
+
+## 1. Setup  
+
+### For filenames  
+```{r}
+
+program_year <- "Milfersk_2021"
+
+```
+
+### Labware data  
+
+```{r}
+
+dat_lab <- readRDS("Data/300_dat_lab_Milfersk_2021_2023-06-06.rds")
+
+```
+
+
+### Packages and functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(knitr)     # for kable
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+
+## 2. Data  
+
+### a. Existing Nivabase data (scr. 400)   
+
+```{r}
+
+files <- dir("Data", "400_dat_nb_water_", full.names = TRUE) %>% sort(decreasing = TRUE)
+dat_nb_water <- readRDS(files[1])
+table(dat_nb_water$WATER_SAMPLE_ID)
+
+```
+
+### b. Labware data (scr. 300) 
+
+```{r}
+
+dat_lab <- readRDS("Data/300_dat_lab_Milfersk_2021_2023-06-06.rds") %>%
+  filter(SAMPLE_TYPE %in% c("AVLØPSVANN", "FERSKVANN"))
+
+```
+
+
+### c. IDs in Labware and Nivabase     
+
+```{r}
+
+dat_id_water <- get_nivabase_selection(
+  c("WATER_SAMPLE_ID, LABWARE_TEXT_ID"),
+  "LABWARE_WSID", 
+  "LABWARE_TEXT_ID", unique(dat_lab$TEXT_ID), values_are_text = TRUE)
+nrow(dat_id_water)
+
+# From script 100:  
+particle_samples <- c("NR-2021-07898", "NR-2021-07899", "NR-2021-07900", "NR-2021-07901")
+
+dat_id_water <- dat_id_water %>%
+  mutate(
+    Phase = case_when(
+      LABWARE_TEXT_ID %in% particle_samples ~ "Particle",
+      TRUE ~ "Water")
+  )
+
+```
+
+
+## Check  
+
+### Table of samples   
+```{r}
+
+# xtabs(~LABWARE_TEXT_ID + WATER_SAMPLE_ID + Phase, dat_id_water)
+
+df_samples = dat_id_water %>% 
+  distinct(WATER_SAMPLE_ID, Phase, LABWARE_TEXT_ID) %>%
+  pivot_wider(names_from = Phase, values_from = LABWARE_TEXT_ID) 
+
+writexl::write_xlsx(df_samples, "Data/Milfersk_2021_samples.xlsx")
+
+df_samples
+
+```
+
+### Check data  
+
+```{r}
+
+dat_nb_water %>% 
+filter(NAME %in% c("C6H5N3", "PFOA")) %>% 
+  select(WATER_SAMPLE_ID, NAME, VALUE) %>%
+  pivot_wider(names_from = NAME, values_from = VALUE) 
+
+```
+### Ceck labware import  
+```{r}
+
+#
+# Concentration data in Labware
+#
+
+original_options <- options(useFancyQuotes = FALSE)
+id_strn -  paste(sQuote(dat_id_water$LABWARE_TEXT_ID), collapse = ", ")
+df_samples$
+
+dat_values_lab1 <- get_nivabase_data("select * from NIVADATABASE.LABWARE_IMPORT where TEXT_ID = 'NR-2021-07897'")
+
+
+dat_values_lab2 <- get_nivabase_data("select * from NIVADATABASE.LABWARE_IMPORT where REPORTED_NAME = 'PFOA'")
+
+
+
+  
+
+```
+
+
+
+### Table of parameters  
+
+```{r}
+
+xtabs(~NAME + WATER_SAMPLE_ID, dat_nb_water)  
+
+```
+
+
+
+
+
+
+
