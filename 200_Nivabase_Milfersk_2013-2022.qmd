@@ -17,7 +17,7 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2013_2022"
+program_year <- "Milfersk_2013-2022"
 sampling_year <- 2013:2022
 
 ```
@@ -180,6 +180,23 @@ df_specimens %>%
   xtabs(~Station + Year, .)
 
 ```
+
+#### a2. Stations, trout   
+
+* Based on 'df_specimens'  
+
+```{r}
+
+df_specimens %>%
+  filter(LATIN_NAME == "Salmo trutta") %>%
+  left_join(
+    df_stations %>% select(STATION_ID, STATION_CODE, STATION_NAME)
+    ) %>%
+  mutate(Station = paste(STATION_ID, STATION_CODE, STATION_NAME)) %>%
+  xtabs(~Station + Year, .)
+
+```
+
 ### b. Stations, coordinates    
 
 ```{r}
@@ -346,7 +363,7 @@ df_taxon_check_code <- get_nivabase_data(
 # get_nivabase_data("select * from NIVADATABASE.LABWARE_WSID where rownum < 6")  
 # get_nivabase_data("select * from NIVADATABASE.LABWARE_SLICE_ID where rownum < 6")  
 
-unique(dat_nb_biota$SAMPLE_ID)
+# unique(dat_nb_biota$SAMPLE_ID)
 
 dat_lab_biota <- get_nivabase_selection(
   c("BIOTA_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
@@ -440,3 +457,61 @@ if (FALSE){
 }
 
 ```
+
+
+## APPENDIX snippets  
+```{r}
+
+
+df_specimens <- df_specimens %>%
+  niRvana::get_s
+
+xtabs(~LATIN_NAME, df_specimens)
+xtabs(~Year + LATIN_NAME, df_specimens)
+
+xtabs(~Year + STATION_ID, df_specimens %>% filter(LATIN_NAME == "Salmo trutta"))
+xtabs(~TAXONOMY_CODE_ID, df_specimens %>% filter(LATIN_NAME == "Salmo trutta"))
+
+dff <- get_nivabase_selection(
+  "*",
+  "BIOTA_SINGLE_SPECIMENS",
+  "TAXONOMY_CODE_ID" ,
+  8840, extra_sql = "AND extract(YEAR from DATE_CAUGHT) IN (2013,2014,2015,2016)"
+)
+
+dff <- get_nivabase_data(
+  "SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE TAXONOMY_CODE_ID = 8840 AND EXTRACT(YEAR FROM DATE_CAUGHT) IN (2013,2014,2015,2016)"
+)
+
+dff <- get_nivabase_data(
+  "SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE TAXONOMY_CODE_ID = 8840 AND EXTRACT(YEAR FROM DATE_CAUGHT) = 2013"
+)
+
+dff <- get_nivabase_data(
+  "SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE TAXONOMY_CODE_ID = 8840 AND EXTRACT(YEAR FROM DATE_CAUGHT) IN (2013,2014,2015,2016)"
+)
+
+dff <- get_nivabase_data(
+  "SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE STATION_ID in 67415 = 8840 AND EXTRACT(YEAR FROM DATE_CAUGHT) IN (2013,2014,2015,2016)"
+)
+
+dff <- get_nivabase_data(
+  "SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE TAXONOMY_CODE_ID = 8840 AND STATION_ID in (67414,67415)"
+)
+
+dff <- get_nivabase_data(
+  "SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE STATION_ID in (67414,67415)"
+)
+
+
+
+SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE TAXONOMY_CODE_ID = 8840 AND EXTRACT(YEAR FROM DATE_CAUGHT) IN (2013,2014,2015,2016)
+SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE TAXONOMY_CODE_ID = 8840 AND EXTRACT(YEAR FROM DATE_CAUGHT) IN (2013,2014,2015,2016)
+SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE STATION_ID in 67415 = 8840 AND EXTRACT(YEAR FROM DATE_CAUGHT) IN (2013,2014,2015,2016)
+SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE TAXONOMY_CODE_ID = 8840 AND STATION_ID in (67414,67415)
+SELECT * FROM NIVADATABASE.BIOTA_SINGLE_SPECIMENS WHERE STATION_ID in (67414,67415)
+  
+
+
+```
+
