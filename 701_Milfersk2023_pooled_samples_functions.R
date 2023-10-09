@@ -4,12 +4,13 @@
 # Get list of SAMPLE_IDs for a given species, station and tissue    
 #
 
-draw_samples <- function(species, station, tissue, no_samples, data){
+draw_samples <- function(species, station, tissue, year, no_samples, data){
   samples <- data %>%
     filter(LATIN_NAME %in% species, 
            STATION_NAME %in% station, 
-           TISSUE_NAME %in% tissue) %>%
-    distinct(LATIN_NAME, STATION_NAME, TISSUE_NAME, SAMPLE_ID) %>%
+           TISSUE_NAME %in% tissue,
+           Year %in% year) %>%
+    distinct(LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, SAMPLE_ID) %>%
     pull(SAMPLE_ID)
   n <- length(samples)
   samples_shuffled <- sample(samples, size = n, replace = FALSE)
@@ -38,11 +39,10 @@ draw_samples <- function(species, station, tissue, no_samples, data){
 
 if (FALSE){
   # TEST
-  draw_samples("Salmo trutta", "Mjøsa ørret", "Lever", 4, data = dat)  
   # debugonce(draw_samples)
-  draw_samples("Salmo trutta", "Femunden ørret", "Lever", 4, data = dat)  
-  draw_samples("Salmo trutta", "Femunden ørret", "Lever", 5, data = dat)  
-  draw_samples("Salmo trutta", "Femunden ørret", "Lever", 6, data = dat)  
+  draw_samples("Salmo trutta", "Femunden", "Muskel", 2020, 4, data = dat)  
+  draw_samples("Salmo trutta", "Femunden", "Muskel", 2020, 5, data = dat)  
+  draw_samples("Salmo trutta", "Femunden", "Muskel", 2020, 6, data = dat)  
 }
 
 #
@@ -63,13 +63,13 @@ draw_concentrations <- function(params, ..., data = dat){
 if (FALSE){
   # TEST
   unique(dat$NAME)
+  dat %>% count(NAME, Year) %>% View()
   # debugonce(draw_concentrations)
-  draw_concentrations("Perfluoroktansulfonamid (PFOSA)", 
-                      "Salmo trutta", "Mjøsa ørret", "Lever", 4, data = dat)  
-  draw_concentrations("Perfluoroktansulfonamid (PFOSA)", 
-                      "Salmo trutta", "Femunden ørret", "Lever", 4, data = dat)  
-  draw_concentrations(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)"), 
-                      "Salmo trutta", "Mjøsa ørret", "Lever", 4, data = dat)  
+  draw_concentrations("PFOSA", 
+                      "Salmo trutta", "Mjøsa", "Muskel", 2018, 4, data = dat)  
+  draw_concentrations(c("PFOSA", "PFOS"), 
+                      "Salmo trutta", "Mjøsa", "Muskel", 2018, 4, data = dat)  
+
 }
 
 
@@ -117,14 +117,15 @@ if (FALSE){
   
   # Check fraction of conc. under LOQ 
   dat %>%
-    filter(TISSUE_NAME == "Lever") %>%
+    filter(TISSUE_NAME == "Muskel") %>%
     group_by(NAME) %>%
     summarise(P_under_LOQ = mean(FLAG1 %in% "<"))
   
-  draw_pooled_means_single("Perfluoroktansulfonamid (PFOSA)", 
-                  "Salmo trutta", "Femunden ørret", "Lever", 4, data = dat)  
-  draw_pooled_means_single(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)", "Perfluordekansulfonat (PFDS)"), 
-                  "Salmo trutta", "Femunden ørret", "Lever", 4, data = dat)  
+  draw_pooled_means_single("PFOSA", 
+                  "Salmo trutta", "Femunden", "Muskel", 2018, 4, data = dat)  
+  draw_pooled_means_single(c("PFOSA", "PFOS"), 
+                           "Salmo trutta", "Femunden", "Muskel", 2018, 4, data = dat)  
+
 
 }
 
@@ -144,8 +145,8 @@ draw_pooled_means <- function(..., no_draws){
 
 if (FALSE){
 
-  draw_pooled_means("Perfluoroktansulfonamid (PFOSA)", 
-                           "Salmo trutta", "Femunden ørret", "Lever", 4, data = dat, no_draws = 2)  
+  draw_pooled_means(c("PFOSA", "PFOS"), 
+                    "Salmo trutta", "Femunden", "Muskel", 2018, 4, data = dat, no_draws = 2)  
   
   
 }  
@@ -154,19 +155,20 @@ if (FALSE){
 # Get original data (Strategy = "Single") plus data from 'draw_pooled_means' (Strategy = "Pooled")
 #
 
-get_combined_data <- function(params, species, station, tissue, no_samples, no_draws,
+get_combined_data <- function(params, species, station, tissue, year, no_samples, no_draws,
                               data, under_loq_treatement = "random between LOQ/2 and LOQ"){
   data_orig <- data %>% 
     filter(NAME %in% params,
            LATIN_NAME %in% species, 
            STATION_NAME %in% station, 
-           TISSUE_NAME %in% tissue) %>% 
+           TISSUE_NAME %in% tissue,
+           Year %in% year) %>% 
     select(LATIN_NAME, STATION_NAME, TISSUE_NAME, SAMPLE_ID, NAME, VALUE, FLAG1) %>%
     rename(Conc = VALUE) %>%
     mutate(Strategy = "Single", Draw = NA, Pooled_sample = NA, .before = everything())
   
   data_pooled <- draw_pooled_means(params=params, species=species, station=station, tissue=tissue, 
-                                 no_samples=no_samples, data=data, no_draws=no_draws,
+                                   year = year, no_samples=no_samples, data=data, no_draws=no_draws,
                                  under_loq_treatement=under_loq_treatement) %>%
     mutate(Strategy = "Pooled", .before = everything())
   
@@ -175,10 +177,13 @@ get_combined_data <- function(params, species, station, tissue, no_samples, no_d
 }
 
 if (FALSE){
-  get_combined_data("Perfluoroktansulfonamid (PFOSA)", 
-                    "Salmo trutta", "Femunden ørret", "Lever", data = dat, no_samples = 4, no_draws = 2)  
-  get_combined_data(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)", "Perfluordekansulfonat (PFDS)"), 
-                "Salmo trutta", "Femunden ørret", "Lever", 4, data = dat)  
+  # params, species, station, tissue, year, no_samples, no_draws
+  test <- get_combined_data("PFOS", 
+                    "Salmo trutta", "Femunden", "Muskel", 2018, 4, 2, data = dat)  
+
+  test
+  ggplot(test, aes(paste(Strategy, Draw), Conc)) +
+    geom_point(aes(shape = is.na(FLAG1)))
 }
 
 
@@ -202,10 +207,20 @@ get_summary_each_draw <- function(...){
 
 
 if (FALSE){  
-  get_summary_each_draw("Perfluoroktansulfonamid (PFOSA)", 
-                    "Salmo trutta", "Femunden ørret", "Lever", data = dat, no_samples = 4, no_draws = 2)
-  get_summary_each_draw(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)", "Perfluordekansulfonat (PFDS)"), 
-                    "Salmo trutta", "Femunden ørret", "Lever", data = dat, no_samples = 4, no_draws = 2)  
+  get_summary_each_draw("PFOSA", 
+                    "Salmo trutta", "Femunden", "Muskel", 2018, data = dat, no_samples = 4, no_draws = 2)
+  get_summary_each_draw(c("PFOSA","PFOS"), 
+                        "Salmo trutta", "Femunden", "Muskel", 2018, data = dat, no_samples = 4, no_draws = 2)
+  test <- get_summary_each_draw(c("PFOS","PFOSA"), 
+                                 "Salmo trutta", "Femunden", "Muskel", 2018, data = dat, no_samples = 4, no_draws = 2)
+  
+  test <- get_combined_data("PFOS", 
+                            "Salmo trutta", "Femunden", "Muskel", 2018, 4, 2, data = dat)  
+  
+  test
+  ggplot(test, aes(paste(Strategy, Draw), Median)) +
+    geom_pointrange(aes(min = Min, max = Max)) +
+    facet_wrap(vars(NAME))
 }
 
 get_summary_aggregating_draws <- function(...){
@@ -224,9 +239,17 @@ get_summary_aggregating_draws <- function(...){
 }
 
 if (FALSE){
-  get_summary_aggregating_draws("Perfluoroktansulfonamid (PFOSA)", 
-                                "Salmo trutta", "Femunden ørret", "Lever", data = dat, no_samples = 4, no_draws = 50)
-  get_summary_aggregating_draws(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)", "Perfluordekansulfonat (PFDS)"),
-                                "Salmo trutta", "Femunden ørret", "Lever", data = dat, no_samples = 4, no_draws = 50)
+  test <- get_summary_aggregating_draws("Perfluoroktansulfonamid (PFOSA)", 
+                                "Salmo trutta", "Femunden", "Muskel", 2020, data = dat, no_samples = 4, no_draws = 50)
+  test
+  ggplot(test, aes(Strategy, Median_mean)) +
+    geom_pointrange(aes(min = Median_mean - Median_sd, max = Median_mean + Median_sd))
   
+  test <- get_summary_aggregating_draws(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)", "Perfluordekansulfonat (PFDS)"),
+                                "Salmo trutta", "Femunden", "Muskel", 2020, data = dat, no_samples = 4, no_draws = 50)
+  test
+  ggplot(test, aes(Strategy, Median_mean)) +
+    geom_pointrange(aes(min = Median_mean - Median_sd, max = Median_mean + Median_sd)) +
+    facet_wrap(vars(NAME))
+
 }

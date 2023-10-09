@@ -14,6 +14,8 @@ library(readxl)
 library(ggplot2)
 library(tidyr)
 
+source("701_Milfersk2023_pooled_samples_functions.R")
+
 ```
 
 
@@ -22,13 +24,13 @@ library(tidyr)
 ```{r}
 
 # dat <- readRDS("Data/400_dat_nb_biota_Milfersk_2021_2023-06-06.rds")
+# dat <- readRDS("Data/200_dat_nb_biota_Milfersk_2020_2023-08-07.rds")
 
-dat <- readRDS("Data/200_dat_nb_biota_Milfersk_2020_2023-08-07.rds")
-# dat <- readRDS("Data/200_dat_nb_biota_Milfersk_2021_2023-08-07.rds")
+dat_orig <- readRDS("Data/200_dat_nb_biota_Milfersk_2013-2022_2023-10-09.rds")
 
-# table(addNA(dat$LATIN_NAME))
+# table(addNA(dat_orig$LATIN_NAME))
 
-dat %>%
+dat_orig %>%
   count(LATIN_NAME, STATION_NAME, TISSUE_NAME, SAMPLE_ID, name = "n_par") %>%
   group_by(LATIN_NAME, STATION_NAME, TISSUE_NAME) %>%
   summarise(
@@ -36,6 +38,28 @@ dat %>%
     n_par = median(n_par)
   )
 
+if (FALSE){
+  dat_orig %>%
+    filter(LATIN_NAME == "Salmo trutta" & grepl("Mjøsa", STATION_NAME)) %>%
+    count(TISSUE_NAME, STATION_NAME, Year, SAMPLE_ID, name = "n_par") %>%
+    group_by(TISSUE_NAME, Year, STATION_NAME) %>%
+    summarise(
+      n_samp = n(),
+      n_par = median(n_par)
+    )
+}
+
+dat <- dat_orig %>%
+    filter(LATIN_NAME == "Salmo trutta" ,
+           grepl("Mjøsa", STATION_NAME) | grepl("Femunden", STATION_NAME)) %>%
+  mutate(
+    STATION_NAME = case_when(
+      grepl("Mjøsa", STATION_NAME) ~ "Mjøsa",
+      grepl("Femunden", STATION_NAME) ~ "Femunden")
+  )
+)
+
+xtabs(~TISSUE_NAME + Year + STATION_NAME, dat)
 
 ```
 
@@ -52,11 +76,11 @@ if (FALSE){
   #
   
   # TEST
-  draw_samples("Salmo trutta", "Mjøsa ørret", "Lever", 4, data = dat)  
+  draw_samples("Salmo trutta", "Mjøsa ørret", "Muskel", 4, data = dat)  
   # debugonce(draw_samples)
-  draw_samples("Salmo trutta", "Femunden ørret", "Lever", 4, data = dat)  
-  draw_samples("Salmo trutta", "Femunden ørret", "Lever", 5, data = dat)  
-  draw_samples("Salmo trutta", "Femunden ørret", "Lever", 6, data = dat)  
+  draw_samples("Salmo trutta", "Femunden ørret", "Muskel", 4, data = dat)  
+  draw_samples("Salmo trutta", "Femunden ørret", "Muskel", 5, data = dat)  
+  draw_samples("Salmo trutta", "Femunden ørret", "Muskel", 6, data = dat)  
   
   #
   # Get list of data frames with concentration of given parameters  
@@ -66,23 +90,23 @@ if (FALSE){
   unique(dat$NAME)
   # debugonce(draw_concentrations)
   draw_concentrations("Perfluoroktansulfonamid (PFOSA)", 
-                      "Salmo trutta", "Mjøsa ørret", "Lever", 4, data = dat)  
+                      "Salmo trutta", "Mjøsa ørret", "Muskel", 4, data = dat)  
   draw_concentrations("Perfluoroktansulfonamid (PFOSA)", 
-                      "Salmo trutta", "Femunden ørret", "Lever", 4, data = dat)  
+                      "Salmo trutta", "Femunden ørret", "Muskel", 4, data = dat)  
   draw_concentrations(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)"), 
-                      "Salmo trutta", "Mjøsa ørret", "Lever", 4, data = dat)  
+                      "Salmo trutta", "Mjøsa ørret", "Muskel", 4, data = dat)  
   
   #
   # Get means per pooled sample (i.e. expected concentration if the )
   #
   
-  draw_pool_means(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)", "Perfluordekansulfonat (PFDS)"), 
-                  "Salmo trutta", "Femunden ørret", "Lever", 4, data = dat)  
+  draw_pooled_means(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)", "Perfluordekansulfonat (PFDS)"), 
+                  "Salmo trutta", "Femunden ørret", "Muskel", no_draws = 4, data = dat)  
   
   # EXTRA
   # Check fraction of conc. under LOQ 
   dat %>%
-    filter(TISSUE_NAME == "Lever") %>%
+    filter(TISSUE_NAME == "Muskel") %>%
     group_by(NAME) %>%
     summarise(P_under_LOQ = mean(FLAG1 %in% "<"))
   
