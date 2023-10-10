@@ -23,104 +23,114 @@ source("701_Milfersk2023_pooled_samples_functions.R")
 
 ```{r}
 
-# dat <- readRDS("Data/400_dat_nb_biota_Milfersk_2021_2023-06-06.rds")
-# dat <- readRDS("Data/200_dat_nb_biota_Milfersk_2020_2023-08-07.rds")
+dat_orig1 <- read.csv("Milfersk/Data_combined/001 MF Mjøsa  stack.txt")
 
-dat_orig <- readRDS("Data/200_dat_nb_biota_Milfersk_2013-2022_2023-10-09.rds")
+# xtabs(~Label, dat_orig1)
+xtabs(~Label, dat_orig1 %>% filter(grepl("138", Label)))
 
-# table(addNA(dat_orig$LATIN_NAME))
+# Add substamce names (Identifier) and area, species, tissue, year
+lookup_label <- read.csv("Milfersk/Data_combined/002 Combined Compounds.txt")
+lookup_sample <- read.csv("Milfersk/Data_combined/003 MF samples.txt")
 
-dat_orig %>%
-  count(LATIN_NAME, STATION_NAME, TISSUE_NAME, SAMPLE_ID, name = "n_par") %>%
-  group_by(LATIN_NAME, STATION_NAME, TISSUE_NAME) %>%
-  summarise(
-    n_samp = n(),
-    n_par = median(n_par)
-  )
+dat_orig2 <- dat_orig1 %>%
+  left_join(lookup_label %>% select(Label, Identifier, Group, Subgroup),
+            by = join_by(Label)) %>%
+  left_join(lookup_sample %>% select(LIMS.NR, MYEAR, Compartment, Area, Species.2, Tissue, Weight..g., Length..cm. ),
+            by = join_by(LIMS.NR))
 
-if (FALSE){
-  dat_orig %>%
-    filter(LATIN_NAME == "Salmo trutta" & grepl("Mjøsa", STATION_NAME)) %>%
-    count(TISSUE_NAME, STATION_NAME, Year, SAMPLE_ID, name = "n_par") %>%
-    group_by(TISSUE_NAME, Year, STATION_NAME) %>%
-    summarise(
-      n_samp = n(),
-      n_par = median(n_par)
-    )
-}
+if (nrow(dat_orig2) > nrow(dat_orig1))
+  stop("Check data - left join increased no. of rows")
 
-dat <- dat_orig %>%
-    filter(LATIN_NAME == "Salmo trutta" ,
-           grepl("Mjøsa", STATION_NAME) | grepl("Femunden", STATION_NAME)) %>%
+table(addNA(lookup_sample$Area))
+table(addNA(dat_orig2$MYEAR))
+table(addNA(dat_orig2$Area))
+table(addNA(dat_orig2$Species.2))
+xtabs(~addNA(Species.2) + addNA(Tissue), dat_orig2)
+xtabs(~addNA(MYEAR), dat_orig2)
+xtabs(~addNA(Tissue) + addNA(MYEAR), dat_orig2 %>% filter(Species.2 %in% c("Brown trout", "Abbor -muskel")))
+
+# Extract year - TEST
+x <- stringr::str_extract(dat_orig2$LIMS.NR, "20[1-2][0-9]")
+table(x)
+
+xtabs(~addNA(LOQ == 1) + addNA(MYEAR), 
+      dat_orig2 %>% filter(Species.2 %in% c("Brown trout", "Abbor -muskel")))
+
+xtabs(~addNA(Data.availability) + addNA(MYEAR), 
+      dat_orig2 %>% filter(Species.2 %in% c("Brown trout", "Abbor -muskel")))
+xtabs(~Identifier + addNA(Data.availability), 
+      dat_orig2 %>% filter(Species.2 %in% c("Brown trout", "Abbor -muskel")))
+
+xtabs(~addNA(Data.availability) + addNA(MYEAR), 
+      dat_orig2)
+
+
+dat <- dat_orig2 %>%
   mutate(
-    STATION_NAME = case_when(
-      grepl("Mjøsa", STATION_NAME) ~ "Mjøsa",
-      grepl("Femunden", STATION_NAME) ~ "Femunden")
-  )
-)
+    Year = as.numeric(stringr::str_extract(LIMS.NR, "20[1-2][0-9]")),
+    LATIN_NAME = case_when(
+      Species.2 %in% c("Brown trout", "Abbor -muskel") ~ "Brown trout",
+      TRUE ~ Species.2),
+    FLAG1 = case_when(
+      Data.availability %in% 0 ~ "<",
+      Data.availability %in% 1 ~ as.character(NA))
+  ) %>%
+  rename(
+    NAME = Identifier,
+    STATION_NAME = Area,
+    TISSUE_NAME = Tissue,
+    SAMPLE_ID = LIMS.NR,
+    VALUE = UB
+    ) %>%
+  select(-Species.2)
 
-xtabs(~TISSUE_NAME + Year + STATION_NAME, dat)
-
-```
-
-## Make random draws  
-
-## Test functions      
-
-```{r}
-
-if (FALSE){
-  
-  #
-  # Get list of SAMPLE_IDs for a given species, station and tissue    
-  #
-  
-  # TEST
-  draw_samples("Salmo trutta", "Mjøsa ørret", "Muskel", 4, data = dat)  
-  # debugonce(draw_samples)
-  draw_samples("Salmo trutta", "Femunden ørret", "Muskel", 4, data = dat)  
-  draw_samples("Salmo trutta", "Femunden ørret", "Muskel", 5, data = dat)  
-  draw_samples("Salmo trutta", "Femunden ørret", "Muskel", 6, data = dat)  
-  
-  #
-  # Get list of data frames with concentration of given parameters  
-  #
-  
-  # TEST
-  unique(dat$NAME)
-  # debugonce(draw_concentrations)
-  draw_concentrations("Perfluoroktansulfonamid (PFOSA)", 
-                      "Salmo trutta", "Mjøsa ørret", "Muskel", 4, data = dat)  
-  draw_concentrations("Perfluoroktansulfonamid (PFOSA)", 
-                      "Salmo trutta", "Femunden ørret", "Muskel", 4, data = dat)  
-  draw_concentrations(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)"), 
-                      "Salmo trutta", "Mjøsa ørret", "Muskel", 4, data = dat)  
-  
-  #
-  # Get means per pooled sample (i.e. expected concentration if the )
-  #
-  
-  draw_pooled_means(c("Perfluoroktansulfonamid (PFOSA)", "Perfluoroktylsulfonat (PFOS)", "Perfluordekansulfonat (PFDS)"), 
-                  "Salmo trutta", "Femunden ørret", "Muskel", no_draws = 4, data = dat)  
-  
-  # EXTRA
-  # Check fraction of conc. under LOQ 
-  dat %>%
-    filter(TISSUE_NAME == "Muskel") %>%
-    group_by(NAME) %>%
-    summarise(P_under_LOQ = mean(FLAG1 %in% "<"))
-  
-  
-}  
-
+xtabs(~addNA(MYEAR) + addNA(Year), dat)
+xtabs(~addNA(LATIN_NAME) + addNA(Year), dat)
+xtabs(~addNA(TISSUE_NAME) + addNA(Year), dat %>% filter(LATIN_NAME %in% "Brown trout"))
 
 
 ```
 
+## Testing  
+
+### Make data from random draws  
 
 ```{r}
 
+test <- get_combined_data(c("PFOSA", "PFOS"), 
+                    "Brown trout", "Mjøsa", "Muscle", 2018, 
+                    no_samples = 4, no_draws = 2, 
+                    data = dat)
 
+# test
+ggplot(test, aes(Sampling, Conc)) +
+  geom_point(aes(shape = `LOQ status`)) +
+  scale_shape_manual(values = c("Over LOQ" = 16, "Under LOQ" = 6)) +
+  facet_wrap(vars(NAME), scales = "free_y")
+
+```
+
+### As above, but for several years  
+
+```{r}
+
+all_yrs <- dat %>% 
+  filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle") %>%
+  pull(Year) %>%
+  unique()
+
+test <- map(all_yrs,
+            \(year) get_combined_data(c("BDE99", "PFOS"), 
+                    "Brown trout", "Mjøsa", "Muscle", year = year, 
+                    no_samples = 4, no_draws = 2, 
+                    data = dat)) %>%
+  list_rbind()
+
+# test
+ggplot(test, aes(Year, Conc, color = Sampling)) +
+  geom_point(aes(shape = `LOQ status`)) +
+  scale_shape_manual(values = c("Over LOQ" = 16, "Under LOQ" = 6)) +
+  facet_grid(vars(NAME), vars(Sampling), scales = "free_y")
 
 
 ```

@@ -40,9 +40,12 @@ draw_samples <- function(species, station, tissue, year, no_samples, data){
 if (FALSE){
   # TEST
   # debugonce(draw_samples)
-  draw_samples("Salmo trutta", "Femunden", "Muskel", 2020, 4, data = dat)  
-  draw_samples("Salmo trutta", "Femunden", "Muskel", 2020, 5, data = dat)  
-  draw_samples("Salmo trutta", "Femunden", "Muskel", 2020, 6, data = dat)  
+  # draw_samples("Salmo trutta", "Femunden", "Muskel", 2020, 4, data = dat)  
+
+  draw_samples("Brown trout", "Mjøsa", "Muscle", 2018, 4, data = dat)  
+  draw_samples("Brown trout", "Mjøsa", "Muscle", 2018, 5, data = dat)  
+  draw_samples("Brown trout", "Mjøsa", "Muscle", 2018, 6, data = dat)  
+  
 }
 
 #
@@ -56,7 +59,7 @@ draw_concentrations <- function(params, ..., data = dat){
   map_dfr(samples, 
           \(x) data %>% 
             filter(SAMPLE_ID %in% x & NAME %in% params) %>% 
-            select(LATIN_NAME, STATION_NAME, TISSUE_NAME, SAMPLE_ID, NAME, VALUE, FLAG1),
+            select(LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, SAMPLE_ID, NAME, VALUE, FLAG1),
           .id = "Pooled_sample")
 }
 
@@ -65,10 +68,11 @@ if (FALSE){
   unique(dat$NAME)
   dat %>% count(NAME, Year) %>% View()
   # debugonce(draw_concentrations)
-  draw_concentrations("PFOSA", 
-                      "Salmo trutta", "Mjøsa", "Muskel", 2018, 4, data = dat)  
-  draw_concentrations(c("PFOSA", "PFOS"), 
-                      "Salmo trutta", "Mjøsa", "Muskel", 2018, 4, data = dat)  
+  # draw_concentrations(c("PFOSA", "PFOS"), 
+  #                     "Salmo trutta", "Mjøsa", "Muskel", 2018, 4, data = dat)  
+  
+  draw_concentrations(c("PFOSA", "PFOS"), "Brown trout", "Mjøsa", "Muscle", 2014, 4, data = dat)  
+  
 
 }
 
@@ -92,10 +96,10 @@ draw_pooled_means_single <- function(..., under_loq_treatement = "random between
       data$Conc_for_mean[sel] <- data$VALUE[sel]/2
     }
   } else {
-    LOQ <- min()
+    LOQ <- NA
   }
   result <- data %>%
-    group_by(Pooled_sample, LATIN_NAME, STATION_NAME, TISSUE_NAME, NAME) %>%
+    group_by(Pooled_sample, LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, NAME) %>%
     summarise(
       N_in_pool = n(),
       N_over_LOQ = sum(is.na(FLAG1)),
@@ -121,10 +125,12 @@ if (FALSE){
     group_by(NAME) %>%
     summarise(P_under_LOQ = mean(FLAG1 %in% "<"))
   
-  draw_pooled_means_single("PFOSA", 
-                  "Salmo trutta", "Femunden", "Muskel", 2018, 4, data = dat)  
+  # draw_pooled_means_single(c("PFOSA", "PFOS"), 
+  #                          "Salmo trutta", "Femunden", "Muskel", 2018, 4, data = dat)  
+  
   draw_pooled_means_single(c("PFOSA", "PFOS"), 
-                           "Salmo trutta", "Femunden", "Muskel", 2018, 4, data = dat)  
+                           "Brown trout", "Mjøsa", "Muscle", 2018, 4, data = dat)  
+  
 
 
 }
@@ -145,8 +151,10 @@ draw_pooled_means <- function(..., no_draws){
 
 if (FALSE){
 
+  # draw_pooled_means(c("PFOSA", "PFOS"), 
+  #                   "Salmo trutta", "Femunden", "Muskel", 2018, 4, data = dat, no_draws = 2)  
   draw_pooled_means(c("PFOSA", "PFOS"), 
-                    "Salmo trutta", "Femunden", "Muskel", 2018, 4, data = dat, no_draws = 2)  
+                    "Brown trout", "Mjøsa", "Muscle", 2018, 4, data = dat, no_draws = 2)  
   
   
 }  
@@ -158,32 +166,50 @@ if (FALSE){
 get_combined_data <- function(params, species, station, tissue, year, no_samples, no_draws,
                               data, under_loq_treatement = "random between LOQ/2 and LOQ"){
   data_orig <- data %>% 
+    mutate(Draw = as.character(NA), 
+           Pooled_sample = as.character(NA)) %>%
     filter(NAME %in% params,
            LATIN_NAME %in% species, 
            STATION_NAME %in% station, 
            TISSUE_NAME %in% tissue,
            Year %in% year) %>% 
-    select(LATIN_NAME, STATION_NAME, TISSUE_NAME, SAMPLE_ID, NAME, VALUE, FLAG1) %>%
+    select(LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, SAMPLE_ID, NAME, VALUE, FLAG1) %>%
     rename(Conc = VALUE) %>%
-    mutate(Strategy = "Single", Draw = NA, Pooled_sample = NA, .before = everything())
-  
+    mutate(
+      Strategy = "Single", Sampling = "Single", .before = everything())
+
   data_pooled <- draw_pooled_means(params=params, species=species, station=station, tissue=tissue, 
                                    year = year, no_samples=no_samples, data=data, no_draws=no_draws,
                                  under_loq_treatement=under_loq_treatement) %>%
-    mutate(Strategy = "Pooled", .before = everything())
+    mutate(Strategy = "Pooled",  Sampling = paste(Strategy, Draw), .before = everything())
   
-  bind_rows(data_orig, data_pooled)
+  if (nrow(data_pooled) > 0) {
+    result <- bind_rows(data_orig, data_pooled)
+  } else {
+    result <- data_orig 
+  }
   
+  result <- result %>%
+    mutate(
+      `LOQ status` = case_when(
+        is.na(FLAG1) ~ "Over LOQ",
+        !is.na(FLAG1) ~ "Under LOQ"))
+  
+  result
+
 }
 
 if (FALSE){
   # params, species, station, tissue, year, no_samples, no_draws
-  test <- get_combined_data("PFOS", 
-                    "Salmo trutta", "Femunden", "Muskel", 2018, 4, 2, data = dat)  
-
+  # test <- get_combined_data("PFOS", 
+  #                   "Salmo trutta", "Femunden", "Muskel", 2018, 4, 2, data = dat)  
+  test <- get_combined_data(c("PFOSA", "PFOS"), 
+                    "Brown trout", "Mjøsa", "Muscle", 2019, 4, 2, data = dat)  
   test
   ggplot(test, aes(paste(Strategy, Draw), Conc)) +
-    geom_point(aes(shape = is.na(FLAG1)))
+    geom_point(aes(shape = is.na(FLAG1))) +
+    facet_wrap(vars(NAME), scales = "free_y")
+  
 }
 
 
