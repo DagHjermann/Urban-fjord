@@ -3,6 +3,12 @@ title: "600_Check_export_from_vannmiljo"
 format: html
 ---
 
+Conclusion  
+- Bekkelaget and Alna are lacking NILU parameters! (per 13.10.2023)    
+- Otherwise all data seem to be in
+
+
+
 ## 1. Setup  
 
 ### Packages and scripts    
@@ -47,7 +53,7 @@ dat <- dat %>%
 
 ```{r}
 
-df_par <- read_excel("Data_from_Vannmiljo/Vannmiljo_parametre_SFS_2023-06-22.xlsx")  
+df_par <- read_excel("Data_from_Vannmiljo/Codes/Vannmiljo_parametre_SFS_2023-06-22.xlsx")  
 
 ```
 
@@ -80,7 +86,16 @@ xtabs(~Vannlokalitet + year, dat)
 ### Stations x medium    
 ```{r}
 
-xtabs(~Vannlokalitet + Medium_navn, dat)  
+cat("---------------------------------------------------------------------------\nBIOTA \n")
+xtabs(~Vannlokalitet + Medium_navn, dat %>% filter(grepl("Biota", Medium_navn)))  
+cat("\n---------------------------------------------------------------------------\nNON-BIOTA \n")
+xtabs(~Vannlokalitet + Medium_navn, dat %>% filter(!grepl("Biota", Medium_navn)))  
+
+```
+```{r}
+
+xtabs(~year + Medium_navn, dat %>% filter(Vannlokalitet == "Bekkelaget renseanlegg (STP)"))  
+xtabs(~year + Medium_navn, dat %>% filter(Vannlokalitet == "Alna"))  
 
 ```
 
@@ -92,7 +107,7 @@ xtabs(~Vannlokalitet + Medium_navn, dat)
 # table(df_par$SubGroupName)  
 
 dat2 <- dat %>%
-  left_join(df_par %>% select(ParameterID, CASnr, SubGroupName),
+  left_join(df_par %>% select(ParameterID, CASnr, SubGroupID, SubGroupName),
             by = c("Parameter_id" = "ParameterID"))
 
 table(dat2$SubGroupName)
@@ -106,5 +121,35 @@ table(dat2$SubGroupName)
 xtabs(~SubGroupName + year, dat2)
 
 ```
+
+### Parameter group x station, for one year    
+
+- NOTE: Bekkelaget and Alna are lacking NILU parameters! (per 13.10.2023)    
+
+```{r}
+
+yr <- 2019
+cat("year =", yr, "\n")
+xtabs(~Vannlokalitet + SubGroupID, dat2 %>% filter(year == yr))
+
+```
+
+### Number of samples (min - max) per parameter, by parameter group and station, in one year  
+```{r}
+
+yr <- 2019
+cat("year =", yr, "\n")
+dat2 %>% 
+  filter(year == yr) %>%
+  distinct(Vannlokalitet, Parameter_id, SubGroupID, Provenr) %>% # View()
+  count(Vannlokalitet, Parameter_id, SubGroupID) %>%
+  group_by(Vannlokalitet, SubGroupID) %>%
+  summarise(n = paste(min(n), "-", max(n)), .groups = "drop") %>%
+  pivot_wider(names_from = SubGroupID, values_from = n) 
+  # knitr::kable()
+# xtabs(~Vannlokalitet + SubGroupID, )
+
+```
+
 
 
