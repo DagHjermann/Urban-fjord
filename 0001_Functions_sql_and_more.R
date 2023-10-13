@@ -515,6 +515,98 @@ get_biota_chemistry_station <- function(station_code, myear){
 }
 
 
+
+#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
+#
+# Functions for getting lookup data ----
+#
+#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
+
+# Get rows from METHOD_DEFINITIONS (including 'METHOD_ID') fitting NAME, UNIT, LABORATORY, and MATRIX
+# - NAME, UNIT are from a data frame
+# - LABORATORY, MATRIX must be the same for all (if they are in the data frame, they will be ignored)
+
+get_lookup_methodid <- function(df_parameters, lab, matrix){
+  # First get all rows fitting NAME
+  result_allunits <- get_nivabase_selection(
+    "NAME, UNIT, LABORATORY, METHOD_ID, MATRIX",
+    "METHOD_DEFINITIONS",
+    "NAME",
+    df_parameters$NAME, values_are_text = TRUE, 
+    extra_sql = paste0("AND LABORATORY = ", sQuote(lab), "AND MATRIX = ", sQuote(matrix))
+  )
+  # result_allunits
+  # Then remove rows not fitting UNIT (for each NAME)
+  input_data <- df_parameters[c("NAME", "UNIT")]
+  # Replace NA with an empty string ("")
+  result_allunits$UNIT[is.na(result_allunits$UNIT)] <- ""
+  input_data$UNIT[is.na(input_data$UNIT)] <- ""
+  result <- result_allunits %>% 
+    semi_join(input_data, by = join_by(NAME, UNIT))
+  result
+}
+
+if (FALSE){
+  # TEST
+  df_params <- structure(list(
+    NAME = c("HCBD", "PeCB", "HCB"), 
+    UNIT = c("ng/g w.w.", "ng/g w.w.", "ng/g w.w.")
+  ), row.names = c(NA, -3L), class = c("data.frame"))
+  debugonce(get_lookup_methodid)
+  test <- get_lookup_methodid(df_params, lab = 'NILU', matrix = 'BIOTA')
+}
+
+#
+# Search for a given NAME, LABORATORY, MATRIX (returns all values regardless of UNIT)
+# - if exact = TRUE, NAME can be several values  
+# - if exact = FALSE, NAME can be only one value (searches within string, but is case sensitive)  
+# - one or both of LABORATORY, MATRIX can be NA; if so, they are ignored  
+# - possible improvement: case-insensitive search
+#
+search_lookup_methodid <- function(names, lab, matrix, exact = TRUE){
+  extra_sql <- ""
+  if (!is.na(lab)){
+    extra_sql <- paste(extra_sql, "AND LABORATORY = ", sQuote(lab))
+  }
+  if (!is.na(matrix)){
+    extra_sql <- paste(extra_sql, "AND MATRIX = ", sQuote(matrix))
+  }
+  if (exact){
+  result_allunits <- get_nivabase_selection(
+    "NAME, UNIT, LABORATORY, METHOD_ID, MATRIX",
+    "METHOD_DEFINITIONS",
+    "NAME",
+    names, values_are_text = TRUE, 
+    extra_sql = extra_sql
+  )
+  } else {
+    if (length(names) > 1)
+      stop("When exact = FALSE, 'names' must only be a single word/string")
+    sql <- paste(
+      "SELECT NAME, UNIT, LABORATORY, METHOD_ID, MATRIX",
+      "FROM NIVADATABASE.METHOD_DEFINITIONS",
+      "WHERE NAME like",
+      sQuote(paste0("%", names, "%"))
+    )
+    sql <- paste(sql, extra_sql)
+    result_allunits <- get_nivabase_data(sql)
+  }
+  result_allunits
+}
+
+if (FALSE){
+  search_lookup_methodid("d13CVPDP", lab = 'IFE', matrix = 'BIOTA')
+  search_lookup_methodid("d13C", lab = 'IFE', matrix = 'BIOTA', exact = FALSE)
+  search_lookup_methodid("TOC", lab = 'NIVA', matrix = 'SEDIMENT', exact = FALSE)
+  search_lookup_methodid("TOC", lab = NA, matrix = 'SEDIMENT', exact = FALSE)
+  search_lookup_methodid("TOC", lab = 'NIVA', matrix = NA, exact = FALSE)
+  search_lookup_methodid("TOC", lab = NA, matrix = NA, exact = FALSE)
+  
+  search_lookup_methodid("d15N", lab = 'IFE', matrix = 'BIOTA', exact = FALSE)
+  test <- search_lookup_methodid("TOC", lab = NA, matrix = NA, exact = FALSE)
+}
+
+
 #o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
 #
 # Functions for testing ----
