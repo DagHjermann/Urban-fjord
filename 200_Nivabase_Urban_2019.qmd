@@ -1,5 +1,5 @@
 ---
-title: "Script 200_Nivabase_Urban_2022"
+title: "Script 200_Nivabase_Urban_2019"
 format: html
 ---
 
@@ -17,8 +17,8 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Urban_2022"
-sampling_year <- 2022
+program_year <- "Urban_2019"
+sampling_year <- 2019
 
 ```
 
@@ -26,7 +26,7 @@ sampling_year <- 2022
 
 ```{r}
 
-dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2022_2023-06-22.rds")
+# dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2019_2023-06-22.rds")
 
 ```
 
@@ -124,122 +124,88 @@ dat_nb_sediment <- dat_nb_sediment %>%
 
 ```
 
-### Check sample year 2021 for seal muscle and blubber  
+### Water and sediment stations    
+```{r}
 
-- Seal sampled by UiO in 2021, samples analysed in 2022  
-- Lacking there as well
+table(dat_nb_water$STATION_CODE)
+table(dat_nb_sediment$STATION_CODE)
+
+```
+
+### Check for example parameters   
+
+- In the export from Vannmiljø, we found NILU parameters to be lacking for Bekkelaget and Alna  
+    - See '601_Check_vmexport_Urbanfjord_2023-06-22.qmd'  
+- The same seems to be the case in Nivabasen   
+    - see below: PFAS are NIVA parameters, UV are IFE parameters, the rest is NILU   
 
 ```{r}
 
-df_specimens_2021 <- get_specimens_from_stationdata(df_stations, years = 2021)
-message("No. of specimens, biota: ", nrow(df_specimens))
+# lookup_param <- read_excel("Input_data/Lookup_files/lookup_substancename_biota.xlsx")
+
+# table(dat_nb_sediment$NAME) %>% names() %>% dput()
+
+param_sel <- c("<63 µm", "BDE-100", "Cd", "Dechlorane 601", 
+"HCB", "Hg", "SCCP", "PCB-118", "Perfluorheksansulfonat (PFHxS)", 
+"Perfluoroktansulfonamid (PFOSA)", "Perfluoroktansyre (PFOA)",
+"TBPH (BEH /TBP)", "UV-328")
+
+dat_nb_sediment %>%
+  filter(NAME %in% param_sel) %>%
+  xtabs(~NAME + STATION_CODE, .)
+
+dat_nb_water %>%
+  filter(NAME %in% param_sel) %>% # View()
+  xtabs(~NAME + STATION_CODE, .)
+
+```
+
+### Check dates  
+- for one example parameter (a NIVA parameter, present in all)    
+- Dates are unique  
+```{r}
+
+dat_nb_sediment %>%
+  filter(NAME %in% "Perfluoroktansyre (PFOA)") %>%
+  xtabs(~SAMPLE_DATE + STATION_CODE, .)
+
+dat_nb_water %>%
+  filter(NAME %in% "Perfluoroktansyre (PFOA)") %>%
+  xtabs(~SAMPLE_DATE + STATION_CODE, .)
 
 ```
 
 
-## 3. Couple Labware TEXT_ID per Nivabase SAMPLE_ID
 
-### Get Labware sample ID     
-
+### Check example water samples
+- Just to make sure only date differs for water samples  
+- No particle/water phase this year  
 ```{r}
 
-# get_nivabase_data("select * from NIVADATABASE.LABWARE_BSID where rownum < 6")  
-# get_nivabase_data("select * from NIVADATABASE.LABWARE_WSID where rownum < 6")  
-# get_nivabase_data("select * from NIVADATABASE.LABWARE_SLICE_ID where rownum < 6")  
-
-# unique(dat_nb_biota$SAMPLE_ID)
-
-dat_lab_biota <- get_nivabase_selection(
-  c("BIOTA_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_BSID", 
-  "BIOTA_SAMPLE_ID", unique(dat_nb_biota$SAMPLE_ID)) 
-
-# No measurements in water 
-# dat_lab_water <- get_nivabase_selection(
-#   c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-#   "LABWARE_WSID",
-#   "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID))
-
-dat_lab_sediment <- get_nivabase_selection(
-  c("SLICE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_SLICE_ID", 
-  "SLICE_ID", unique(dat_nb_sediment$SLICE_ID)) 
+check1 <- get_nivabase_selection(
+  "*",
+  "WATER_SAMPLES",
+  "WATER_SAMPLE_ID",
+  c(11379134,11379135)
+)
+check2 <- get_nivabase_selection(
+  "*",
+  "WATER_CHEMISTRY_VALUES",
+  "WATER_SAMPLE_ID",
+  c(11379134,11379135), extra_sql = " AND METHOD_ID = 33645"
+)
+check3a <- get_nivabase_selection(
+  "*",
+  "LABWARE_WSID",
+  "WATER_SAMPLE_ID",
+  c(11379134,11379135)
+)
+check3b <- get_nivabase_selection(
+  "*",
+  "LABWARE_CHECK_SAMPLE",
+  "TEXT_ID",
+  check3a$LABWARE_TEXT_ID, values_are_text = TRUE
+)
 
 ```
 
-
-
-### Add labware TEXT_ID to the data?  
-
-* Not done, as there may be two (or more?) Labware TEXT_ID per Nivabase SAMPLE_ID   
-
-* Demonstrated for biota  
-
-* Duplicate of BIOTA_SAMPLE_ID = 247003  
-    - Labware numbers NR-2021-07918 (DESCRIPTION = ØM-L-1) and NR-2021-11104 (DESCRIPTION = ØM-L-BP)  
-    - Seems to be two rounds of analyses: Some parameters has a value for DESCRIPTION = ØM-L-1 and value = "T" fpr DESCRIPTION = ØM-L-BP, some have the other  
-
-```{r}
-
-# Expect this to have zero rows:
-check <- dat_lab_biota %>% add_count(BIOTA_SAMPLE_ID) %>% filter(n > 1)
-
-if (nrow(check) == 0){
-  message("No duplicates of any SAMPLE_ID")
-} else {
-  stop("Duplicates of any SAMPLE_ID - see script 200_Nivabase_Milfersk_2021")
-}
-
-```
-
-#### Number of parameters per sample    
-
-* n_samples = 2 for water samples  
-    - represents water and particle fractions from the same physical sample    
-    - 'Avløpsvann og avløpsslam' and 'Hamar overvann'   
-* n_samples = 3 for trout (ørret) and surface water    
-    - represents 3 physical samples      
-
-```{r}
-
-dat_nb_biota_names <- dat_nb_biota %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, name = "n_samples")
-df1 <- dat_nb_biota_names %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, n_samples)
-# df1
-
-dat_nb_water_names <- dat_nb_water %>%
-  mutate(LATIN_NAME = NA, TISSUE_NAME = NA) %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, name = "n_samples")
-df2 <- dat_nb_water_names %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, n_samples)
-# df2
-
-dat_nb_sediment_names <- dat_nb_sediment %>%
-  mutate(LATIN_NAME = NA, TISSUE_NAME = NA) %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, name = "n_samples")
-df3 <- dat_nb_sediment_names %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, n_samples)
-# df3
-
-bind_rows(df1, df2, df3)
-
-
-```
-
-
-## 4. Save  
-
-```{r}
-
-saveRDS(dat_nb_biota, paste0("Data/200_dat_nb_biota_", program_year, "_", today(), ".rds"))
-saveRDS(dat_nb_water, paste0("Data/200_dat_nb_water_", program_year, "_", today(), ".rds"))
-saveRDS(dat_nb_sediment, paste0("Data/200_dat_nb_sediment_", program_year, "_", today(), ".rds"))
-
-if (FALSE){
-  files <- dir("Data", "200_dat_nb_sediment_", full.names = TRUE) %>% sort(decreasing = TRUE)
-  dat_nb_sediment <- readRDS(files[1])
-  table(dat_nb_sediment$SLICE_ID)
-}
-
-```
