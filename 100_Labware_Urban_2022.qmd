@@ -1,0 +1,334 @@
+---
+title: "100_Labware_Urban_2022"
+format: html
+---
+
+## Read samples from Labware LIMS   
+- Script 1**_Labware_[program]_[year]     
+- function get_labware_samples    
+- for comparing samples in Labware with samples in report, and (later) with other data   
+
+
+## 1. Settings  
+
+### For filenames  
+```{r}
+
+program_year <- "Urban_2022"
+
+```
+
+## 2. Packages and functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)  
+library(knitr)     # for kable
+library(glue)      # alternative to paste()  
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+## 3. Get all samples  
+
+### Find projects/samples     
+```{r}
+
+df_proj <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where PROSJEKT = 'O 210135;ANA - Miljøgifter i en urban fjord (2021-2026)'") 
+
+df_proj <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where PROSJEKT like '%urban%'") %>%
+  distinct(PROSJEKT, ANALYSEOPPDRAG)
+
+df_samples_all <- get_nivabase_data("select * from NIVADATABASE.LABWARE_CHECK_SAMPLE where PROSJEKT like '%urban%'")
+
+df_samples_all <- df_samples_all %>%
+  mutate(
+    year = year(SAMPLED_DATE),
+    year_from_textid = substr(df_samples_all$TEXT_ID, 4, 7))
+
+ggplot(df_samples_all, aes(x = SAMPLED_DATE, fill = factor(year_from_textid))) +
+  geom_histogram()
+# Seal blubber samples in "early 2021" which has TEXT_ID for 2022 must have wrong SAMPLE_DATE   
+# See below
+
+# xtabs(~addNA(year) + addNA(year_from_textid), df_samples_all)  
+# NOTE: 2022 data (acc. to text ID) with no date
+
+```
+
+
+### Get all samples 
+
+- ANALYSEOPPDRAG set by comparing with excel 'Samlede resultater 2022_Urbanfjord'   
+- https://niva365.sharepoint.com/:x:/r/sites/Miljgifterienurbanfjord2021-2026/_layouts/15/Doc.aspx?sourcedoc=%7B3C315A97-1A5F-4B0C-BDA5-C87DD05BF0A7%7D&file=Samlede%20resultater%202022_Urbanfjord.xlsx&action=default&mobileredirect=true   
+
+```{r}
+
+df_samples_2022 <- df_samples_all %>%
+  filter(year_from_textid == 2022) %>%
+  filter(!ANALYSEOPPDRAG %in% c("1150-11687", "1150-11698","1150-11699", "1150-11700", "1150-11701", "1150-11690")) %>%
+  arrange(TEXT_ID)
+
+if (FALSE){
+  df_samples_2022 %>%
+    select(year, year_from_textid, ANALYSEOPPDRAG, TEXT_ID, SAMPLE_TYPE, SAMPLED_DATE, DESCRIPTION, 
+           AQUAMONITOR_CODE, SPECIES, TISSUE, BIOTA_SAMPLENO) %>%
+    View("2022")
+}
+
+```
+
+### Seal blubber  
+
+- all seems OK (lacked station, added by Veronica oct 2023)  
+
+```{r}
+
+df_samples_blubber <- df_samples_all %>%
+  filter(grepl("spekk", DESCRIPTION)) %>%
+  arrange(TEXT_ID)
+
+```
+
+### Seal muscle   
+
+- all seems OK (lacked station, date and species, added by Veronica oct 2023)  
+
+```{r}
+
+df_samples_muscle <- df_samples_all %>%
+  filter(grepl("Selmuskel", DESCRIPTION)) %>%
+  arrange(TEXT_ID)
+
+```
+
+
+### Check columns that should be there     
+
+```{r}
+
+check <- check_lims_samples(df_samples_2022)
+
+```
+
+## X. Write file for fixing LIMS data  
+
+```{r}
+
+if (FALSE){
+  
+  # Write file used to fill in lacking info and request update in LIMS
+  
+  # Example 1 (2023-10-12) 
+  writexl::write_xlsx(
+    list(Selmuskel = df_samples_muscle,
+         Selspekk = df_samples_blubber),
+    "Data/Labware_Urbanfjord_2022_selprøver_fra_basen.xlsx"
+  )
+  
+  # Example 2 (2023-10-13)
+  # check$biota
+  writexl::write_xlsx(
+    df_samples_all %>% filter(DESCRIPTION %in% check$biota$samples$DESCRIPTION), 
+    "Data/Labware_Urbanfjord_2022_biotaprøver_fra_basen.xlsx"
+  )
+  
+}
+
+```
+
+
+## X. Save  
+
+```{r}
+
+fn <- glue::glue("Data/100_lims_samples_{program_year}_{today(tzone = 'UTC')}.rds")
+fn
+
+saveRDS(df_samples_2022, fn)
+
+```
+
+## OLD STUFF 
+
+```{r}
+
+xtabs(~addNA(year) + addNA(year_from_textid), df_samples_all)  
+# NOTE: 2022 data (acc. to text ID) with no date
+
+df_samples_all %>%
+  filter(is.na(year)) %>% 
+
+df_samples_all %>%
+  filter(is.na(year)) %>%
+  View()
+
+
+table(df_samples_all$SAMPLED_DATE)
+table(year(df_samples_all$SAMPLED_DATE))
+
+df_samples <- df_samples_all %>%
+  filter(year == 2022)
+  
+xtabs(~addNA(paste(SPECIES, TISSUE)) + SAMPLE_TYPE, df_samples)  
+
+oppdrag <- df_proj %>% pull(ANALYSEOPPDRAG)
+
+if (length(oppdrag) > 1) {
+  stop("More than one oppdrag found!")
+}
+
+```
+
+
+### Get samples  
+```{r}
+
+# Search using ANALYSEOPPDRAG (PROEJCT is problematic due to charcters)
+df_lab_all <- get_nivabase_selection(
+  "*", "LABWARE_CHECK_SAMPLE", "ANALYSEOPPDRAG", oppdrag, values_are_text = TRUE)   
+
+df_lab_all %>%
+  count(PROSJEKT, Year_id = substr(TEXT_ID, 4,7), Year_sample = year(SAMPLED_DATE))
+
+```
+
+## 4. Samples in current year       
+```{r}
+
+df_lab <- df_lab_all %>% 
+  filter(year(SAMPLED_DATE) == 2022)  
+
+```
+
+### Tables  
+
+#### Stations  
+
+* NOTE: Station lacking for 79 samples ! 
+
+```{r}
+
+df_lab %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME) 
+
+```
+
+#### Samples where station is lacking  
+```{r}
+
+df_lab %>%
+  filter(is.na(AQUAMONITOR_ID)) %>% # View()
+  count(SAMPLE_TYPE, SPECIES, TISSUE) 
+
+```
+#### Samples where station is lacking and species not given   
+```{r}
+
+df_lab %>%
+  filter(is.na(AQUAMONITOR_ID) & SPECIES == "Ikke angitt") %>% # View()
+  count(DESCRIPTION) 
+
+```
+
+#### Check description for water samples   
+
+* 3 samples (probably surface water)  
+* HAs PFAS values, see Appendix 1  
+* However, according the budget (link below), there should be no water samples in 2022  
+    - https://niva365.sharepoint.com/:x:/r/sites/projects1/3604/Shared%20Documents/2022/01%20Project%20management/Budget/Copy%20of%20MILFERSK%20n%C3%A6ringsnett%20budsjett%202021-25_KSL.xlsx?d=w7f6c5391a33c4b96b357b1744fd28a99&csf=1&web=1&e=OIqLJ1
+
+```{r}
+
+df_lab %>%
+  filter(is.na(AQUAMONITOR_ID) & SAMPLE_TYPE == "FERSKVANN") %>% # View()
+  count(TEXT_ID, DESCRIPTION) 
+
+```
+
+#### Check date  
+
+* OK 
+
+```{r}
+
+df_lab %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SAMPLED_DATE) 
+
+```
+
+
+
+#### Station "Benthic food chain"       
+
+```{r}
+
+df_lab %>%
+  filter(AQUAMONITOR_NAME == "Bentisk næringskjede") %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SPECIES, TISSUE) 
+
+```
+
+#### Overvann samples  
+
+* H1_V, H1_P = sample 1, water and particle fraction  
+* H2_V, H2_P = sample 2, water and particle fraction  
+
+```{r}
+
+df_lab %>%
+  filter(AQUAMONITOR_NAME == "Hamar overvann") %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, DESCRIPTION) 
+
+```
+
+
+#### HIAS samples  
+
+* HIAS_S = Actual sediment  
+* HIAS1_V, HIAS1_P = sample 1, water and particle fraction
+* HIAS2_V, HIAS2_P = sample 2, water and particle fraction  
+
+```{r}
+
+df_lab %>%
+  filter(AQUAMONITOR_NAME == "Avløpsvann og avløpsslam") %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, DESCRIPTION) 
+
+```
+
+## 5. Save  
+
+```{r}
+
+fn <- glue::glue("Data/100_dat_lab_{program_year}_{today(tzone = 'UTC')}.rds")
+fn
+
+saveRDS(df_lab, fn)
+
+```
+
+## 6. APPENDIX 1: Labware values   
+
+* Water samples: PFAS (old and new) but nothing else   
+
+```{r}
+
+check <- get_nivabase_selection(
+  "*", "LABWARE_IMPORT", "TEXT_ID", c("NR-2022-13730", "NR-2022-13731", "NR-2022-13732"), values_are_text = TRUE)   
+
+
+```
+
+

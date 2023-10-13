@@ -606,6 +606,138 @@ if (FALSE){
   test <- search_lookup_methodid("TOC", lab = NA, matrix = NA, exact = FALSE)
 }
 
+get_species_from_id <- function(taxoncode_id){
+  taxoncode_id <- taxoncode_id[!is.na(taxoncode_id)]
+  taxoncode_id <- unique(taxoncode_id)
+  if (length(taxoncode_id) > 0) {
+    result <- get_nivabase_data(paste("select a.TAXONOMY_CODE_ID, b.LATIN_NAME", 
+                                          "from NIVADATABASE.TAXONOMY_CODES a LEFT JOIN NIVADATABASE.TAXONOMY b ON a.NIVA_TAXON_ID = b.NIVA_TAXON_ID", 
+                                          "where TAXONOMY_CODE_ID in", "(", paste(taxoncode_id, 
+                                                                                  collapse = ","), ");"))
+  } else {
+    result <- NULL
+  }
+  result
+}
+
+if (FALSE){
+  # debugonce(get_species_from_id)
+  get_species_from_id(8927)
+}
+
+#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
+#
+# Functions for checking samples in LIMS ----
+#
+#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
+
+
+check_lims_samples <- function(lims_samples){
+  
+  check <- list(
+    check_lims_samples_type(lims_samples, type = "all"),
+    check_lims_samples_type(lims_samples, type = "biota")
+  )
+  
+  warning_message <- c(
+    "Some info necessary for all samples is lacking!",
+    "Some info necessary for biota samples is lacking!"
+  )
+  
+  # 1. For all rows (i=1) and biota rows (i=2), check that there are no NA values     
+  for (i in 1:2){
+    if (sum(check[[i]]$coltable) > 0){
+      
+      samples <- check[[i]]$samples
+      coltable <- check[[i]]$coltable
+      
+      cat("=============================================================\n")
+      cat(warning_message[i], "\n=============================================================\n")
+      
+      message("\nColumns lacking info:")
+      columns_lacking_info <- coltable > 0
+      print(names(coltable)[columns_lacking_info])  
+      
+      message("\nRows lacking info:")
+      samples_lacking_info <- apply(is.na(samples), 1, sum) > 0
+      print(
+        samples[samples_lacking_info, "DESCRIPTION"])  
+      cat("\n")
+      
+    }
+  }
+  
+  # 2. For biota rows, check if there are no BIOTA_SAMPLENO = 0  
+  i <- 2
+  samples <- check[[i]]$samples
+  sampleno_is_zero <- samples$BIOTA_SAMPLENO %in% 0
+  if (sum(sampleno_is_zero) > 0){
+    cat("=============================================================\n")
+    cat("Some BIOTA_SAMPLENO are zero!\n=============================================================\n")
+    message("\nRows with BIOTA_SAMPLENO = 0:")
+    print(
+      samples[sampleno_is_zero, "DESCRIPTION"])  
+    cat("\n")
+  }
+
+  
+  invisible(
+    list(
+      all = check[[1]],
+      biota = check[[2]]
+    )
+  )
+  
+}
+
+# Helper function for 'check_lims_samples'  
+
+check_lims_samples_type <- function(lims_samples, type = "all"){
+  
+  if (type == "all"){
+    check <- lims_samples %>%
+      select(ANALYSEOPPDRAG, TEXT_ID, SAMPLE_TYPE, SAMPLED_DATE, DESCRIPTION, 
+             AQUAMONITOR_CODE)
+  } else if (type == "biota"){
+    check <- lims_samples %>%
+      filter(SAMPLE_TYPE == "BIOTA") %>%
+      select(DESCRIPTION, SPECIES, TISSUE, BIOTA_SAMPLENO)
+  } else {
+    stop("Type must be 'all' or 'biota")
+  }
+  check_tab <- apply(is.na(check), 2, sum)  
+  
+  list(samples = check, coltable = check_tab)
+  
+}
+
+if (FALSE){
+  
+  df_samples_all <- get_nivabase_data("select * from NIVADATABASE.LABWARE_CHECK_SAMPLE where PROSJEKT like '%urban%'")
+  
+  df_samples_all <- df_samples_all %>%
+    mutate(
+      year = year(SAMPLED_DATE),
+      year_from_textid = substr(df_samples_all$TEXT_ID, 4, 7))
+  
+  df_samples_2022 <- df_samples_all %>%
+    filter(year_from_textid == 2022) %>%
+    filter(!ANALYSEOPPDRAG %in% c("1150-11687", "1150-11698","1150-11699", "1150-11700", "1150-11701", "1150-11690")) %>%
+    arrange(TEXT_ID)
+  
+  df_samples_2022 %>%
+    select(ANALYSEOPPDRAG, TEXT_ID, SAMPLE_TYPE, SAMPLED_DATE, DESCRIPTION, 
+           AQUAMONITOR_CODE, SPECIES, TISSUE) %>% dput()
+  
+  # or get sample data from "APPENDIX 1: LIMS sample data example", below!
+  
+  check_lims_samples_type(df_samples_2022, type = "all")
+  check_lims_samples_type(df_samples_2022, type = "biota")
+  
+  # debugonce(check_lims_samples)
+  check_lims_samples(df_samples_2022)
+  
+}
 
 #o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
 #
@@ -635,3 +767,119 @@ check_na <- function(data, variablename, error = TRUE){
   invisible(result)
 }
 
+
+# APPENDIX 1: LIMS sample data example ----  
+# contains lacking AQUAMONITOR_CODE
+
+if (FALSE){
+  
+  
+  # source("C:/Data/seksjon 212/Urban-fjord/0001_Functions_sql_and_more.R")
+  #   df_samples_2022 %>%
+  #  +     select(ANALYSEOPPDRAG, TEXT_ID, SAMPLE_TYPE, SAMPLED_DATE, DESCRIPTION, 
+  #               +            AQUAMONITOR_CODE, SPECIES, TISSUE) %>% dput()
+  df_samples_2022 <- structure(list(ANALYSEOPPDRAG = c("1150-11649", "1150-11649", 
+                                    "1150-11649", "1150-11649", "1150-11649", "1150-11649", "1150-11649", 
+                                    "1150-11649", "1150-11649", "1150-11649", "1150-11688", "1150-11688", 
+                                    "1150-11688", "1150-11688", "1150-11688", "1150-11688", "1150-11688", 
+                                    "1150-11688", "1150-11688", "1150-11688", "1150-11688", "1150-11688", 
+                                    "1150-11688", "1150-11688", "1150-11688", "1150-11689", "1150-11689", 
+                                    "1150-11689", "1150-11691", "1150-11691", "1150-11691", "1150-11691", 
+                                    "1150-11691", "1150-11691", "1150-11703", "1150-11703", "1150-11703", 
+                                    "1150-11703", "1150-11703", "1150-11703", "1150-11703", "1150-11703", 
+                                    "1150-11703", "1150-11703", "1150-11703", "1150-11703", "1150-11737", 
+                                    "1150-11737", "1150-11737", "1150-11737", "1150-11737", "1150-11737", 
+                                    "1150-11737", "1150-11737", "1150-11737", "1150-11737"), 
+                 TEXT_ID = c("NR-2022-10332", 
+                             "NR-2022-10333", "NR-2022-10334", "NR-2022-10335", "NR-2022-10336", 
+                             "NR-2022-10337", "NR-2022-10338", "NR-2022-10339", "NR-2022-10340", 
+                             "NR-2022-10342", "NR-2022-10791", "NR-2022-10792", "NR-2022-10793", 
+                             "NR-2022-10794", "NR-2022-10795", "NR-2022-10796", "NR-2022-10797", 
+                             "NR-2022-10798", "NR-2022-10799", "NR-2022-10800", "NR-2022-10801", 
+                             "NR-2022-10802", "NR-2022-10803", "NR-2022-10804", "NR-2022-10805", 
+                             "NR-2022-10806", "NR-2022-10807", "NR-2022-10808", "NR-2022-10824", 
+                             "NR-2022-10825", "NR-2022-10826", "NR-2022-10827", "NR-2022-10828", 
+                             "NR-2022-10829", "NR-2022-11003", "NR-2022-11004", "NR-2022-11005", 
+                             "NR-2022-11006", "NR-2022-11007", "NR-2022-11008", "NR-2022-11009", 
+                             "NR-2022-11010", "NR-2022-11011", "NR-2022-11012", "NR-2022-11013", 
+                             "NR-2022-11014", "NR-2022-11599", "NR-2022-11600", "NR-2022-11601", 
+                             "NR-2022-11603", "NR-2022-11604", "NR-2022-11605", "NR-2022-11606", 
+                             "NR-2022-11607", "NR-2022-11608", "NR-2022-11609"), 
+                 SAMPLE_TYPE = c("BIOTA", 
+                                 "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", 
+                                 "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", 
+                                 "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", 
+                                 "BIOTA", "BIOTA", "BIOTA", "SEDIMENT", "SEDIMENT", "SEDIMENT", 
+                                 "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", 
+                                 "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", 
+                                 "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", 
+                                 "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA", "BIOTA"
+                 ), 
+                 SAMPLED_DATE = structure(c(1610150400, 1610150400, 1610150400, 
+                                            1610150400, 1610150400, 1610150400, 1610236800, 1610236800, 1610236800, 
+                                            1610150400, 1660694400, 1660694400, 1660694400, 1660694400, 1660694400, 
+                                            1660694400, 1660694400, 1660694400, 1660694400, 1660694400, 1660694400, 
+                                            1660694400, 1660694400, 1660694400, 1660694400, 1660694400, 1660694400, 
+                                            1660694400, 1660694400, 1660694400, 1660694400, 1660694400, 1660694400, 
+                                            1660694400, 1661040000, 1661040000, 1661040000, 1661040000, 1661040000, 
+                                            1661040000, 1661040000, 1661040000, 1661040000, 1661040000, 1661040000, 
+                                            1661040000, 1610150400, 1610150400, 1610150400, 1610150400, 1610150400, 
+                                            1610150400, 1610150400, 1610150400, 1610150400, 1610150400), tzone = "UTC", 
+                                          class = c("POSIXct", 
+                                                    "POSIXt")), 
+                 DESCRIPTION = c("Selspekk1", "Selspekk2", "Selspekk3", 
+                                 "Selspekk4", "Selspekk5", "Selspekk6", "Selspekk7", "Selspekk8", 
+                                 "Selspekk9", "Selspekk11", "Børstemark Cm21, Blandprøve", "Børstemark Bekkelaget, Blandprøve", 
+                                 "Børstemark Alna, Blandprøve", "Zoopl./Krill Blandprøve 1", 
+                                 "Zoopl./Krill Blandprøve 2", "Zoopl./Krill Blandprøve 3", "Reker, Blandprøve 1", 
+                                 "Reker, Blandprøve 2", "Reker, Blandprøve 3", "Blåskjell Blandprøve 1", 
+                                 "Blåskjell Blandprøve 2", "Blåskjell Blandprøve 3", "Sild Blandprøve 1", 
+                                 "Sild Blandprøve 2", "Sild Blandprøve 3", "Cm21 Cm21", "Bq41 Bekkelaget", 
+                                 "AL1 Alnas utløp", "Torsk Lever Blandprøve 1", "Torsk Lever Blandprøve 2", 
+                                 "Torsk Lever Blandprøve 3", "Torsk Muskel Blandprøve 1", "Torsk Muskel Blandprøve 2", 
+                                 "Torsk Muskel Blandprøve 3", "Ærfugl Blod blandpr. 1", "Ærfugl Blod blandpr. 2", 
+                                 "Ærfugl Blod blandpr. 3", "Ærfugl Egg blandpr. 1", "Ærfugl Egg blandpr. 2", 
+                                 "Ærfugl Egg blandpr. 3", "Gråmåke Blod blandpr. 1", "Gråmåke Blod blandpr. 2", 
+                                 "Gråmåke Blod blandpr. 3", "Gråmåke Egg blandpr. 1", "Gråmåke Egg blandpr. 2", 
+                                 "Gråmåke Egg blandpr. 3", "Selmuskel1", "Selmuskel2", "Selmuskel3", 
+                                 "Selmuskel5", "Selmuskel6", "Selmuskel7", "Selmuskel8", "Selmuskel9", 
+                                 "Selmuskel10", "Selmuskel11"), 
+                 AQUAMONITOR_CODE = c("Sel Torbj.sk.", 
+                                      "Sel Torbj.sk.", "Sel Torbj.sk.", "Sel Torbj.sk.", "Sel Torbj.sk.", 
+                                      "Sel S.Missing.", "Sel Singleøy", "Sel Singleøy", "Sel Singleøy", 
+                                      "Sel Garnh.", "Cm21", "Bq41", "AL1", "IO", "IO", "IO", "IO", 
+                                      "IO", "IO", "IO Blåskjell", "IO Blåskjell", "IO Blåskjell", 
+                                      "IO", "IO", "IO", "Cm21", "Bq41", "AL1", "IO", "IO", "IO", "IO", 
+                                      "IO", "IO", NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, "Sel Torbj.sk.", 
+                                      "Sel Torbj.sk.", "Sel Torbj.sk.", "Sel Torbj.sk.", "Sel S.Missing.", 
+                                      "Sel Singleøy", "Sel Singleøy", "Sel Singleøy", "Sel Singleøy", 
+                                      "Sel Garnh."), 
+                 SPECIES = c("Phoca vitulina", "Phoca vitulina", "Phoca vitulina", "Phoca vitulina", "Phoca vitulina", "Phoca vitulina",
+                             "Phoca vitulina", "Phoca vitulina", "Phoca vitulina", "Phoca vitulina", 
+                             "Polychaeta", "Polychaeta", "Polychaeta", "Euphausiacea indet", 
+                             "Euphausiacea indet", "Euphausiacea indet", "Pandalus borealis", 
+                             "Pandalus borealis", "Pandalus borealis", "Mytilus edulis", "Mytilus edulis", 
+                             "Mytilus edulis", "Clupea harengus", "Clupea harengus", "Clupea harengus", 
+                             NA, NA, NA, "Gadus morhua", "Gadus morhua", "Gadus morhua", "Gadus morhua", 
+                             "Gadus morhua", "Gadus morhua", "Somateria mollissima", "Somateria mollissima", 
+                             "Somateria mollissima", "Somateria mollissima", "Somateria mollissima", 
+                             "Somateria mollissima", "Larus argentatus", "Larus argentatus", 
+                             "Larus argentatus", "Larus argentatus", "Larus argentatus", "Larus argentatus", 
+                             "Phoca vitulina", "Phoca vitulina", "Phoca vitulina", "Phoca vitulina", 
+                             "Phoca vitulina", "Phoca vitulina", "Phoca vitulina", "Phoca vitulina", 
+                             "Phoca vitulina", "Phoca vitulina"), 
+                 TISSUE = c("SK-Spekk", "SK-Spekk", 
+                            "SK-Spekk", "SK-Spekk", "SK-Spekk", "SK-Spekk", "SK-Spekk", "SK-Spekk", 
+                            "SK-Spekk", "SK-Spekk", "WO-Hel organisme", "WO-Hel organisme", 
+                            "WO-Hel organisme", "WO-Hel organisme", "WO-Hel organisme", "WO-Hel organisme", 
+                            "SB-Whole soft body", "SB-Whole soft body", "SB-Whole soft body", 
+                            "SB-Whole soft body", "SB-Whole soft body", "SB-Whole soft body", 
+                            "MU-Muskel", "MU-Muskel", "MU-Muskel", NA, NA, NA, "LI-Lever", 
+                            "LI-Lever", "LI-Lever", "MU-Muskel", "MU-Muskel", "MU-Muskel", 
+                            "BL-Blod", "BL-Blod", "BL-Blod", "EH-Egg", "EH-Egg", "EH-Egg", 
+                            "BL-Blod", "BL-Blod", "BL-Blod", "EH-Egg", "EH-Egg", "EH-Egg", 
+                            "MU-Muskel", "MU-Muskel", "MU-Muskel", "MU-Muskel", "MU-Muskel", 
+                            "MU-Muskel", "MU-Muskel", "MU-Muskel", "MU-Muskel", "MU-Muskel"
+                 )), class = "data.frame", row.names = c(NA, -56L))
+  
+}
