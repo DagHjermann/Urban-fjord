@@ -3,6 +3,7 @@ title: "250_Nivabase_Urban_2022_addmeas"
 format: html
 ---
 
+- Add NILU and IFE measurements based on script 0110 (folder 'Old scripts')  
 
 
 ## 1. Setup  
