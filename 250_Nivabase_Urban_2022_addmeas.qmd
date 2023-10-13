@@ -1,0 +1,425 @@
+---
+title: "250_Nivabase_Urban_2022_addmeas"
+format: html
+---
+
+
+
+## 1. Setup  
+
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0001_Functions_sql_and_more.R")
+
+knitr::opts_chunk$set(results = 'hold')
+?options
+old_options <- options(useFancyQuotes = FALSE)
+
+```
+
+## 2. Biota - data and parameters    
+
+### Data  
+
+```{r}
+
+dir("Input_data/2022")
+
+dat_biota_nilu <- read_excel("Input_data/2022/Importmal_extern_biota_nilu_2022.xlsx")
+dat_biota_ife <- read_excel("Input_data/2022/Importmal_extern_biota_ife_2022.xlsx")
+
+dat_biota <- bind_rows(
+  dat_biota_nilu,
+  dat_biota_ife
+)
+
+
+```
+
+### Parameters  
+
+```{r}
+
+dat_biota_parameters_nilu <- read_excel("Input_data/2022/Importmal_extern_biota_parameters_nilu_2022.xlsx")
+dat_biota_parameters_ife <- read_excel("Input_data/2022/Importmal_extern_biota_parameters_ife_2022.xlsx")  
+
+```
+
+### Get parameter ID  
+```{r}
+
+lookup_methodid_biota_nilu <- get_lookup_methodid(dat_biota_parameters_nilu, lab = 'NILU', matrix = 'BIOTA')
+lookup_methodid_biota_ife <- get_lookup_methodid(dat_biota_parameters_ife, lab = 'IFE', matrix = 'BIOTA')
+nrow(lookup_methodid_biota_ife)
+
+lookup_methodid_biota <- bind_rows(
+  lookup_methodid_biota_nilu,
+  lookup_methodid_biota_ife
+)
+
+```
+
+### Check  
+```{r}
+
+param_check <- dat_biota %>% 
+  anti_join(lookup_methodid_biota["NAME"], 
+            by = c("METHOD_NAME"="NAME")
+  )
+
+if (nrow(param_check) == 0){
+  message("All methods (NAME, UNIT, LABORATORY, MATRIX) found in METHOD_DEFINITIONS")
+} else {
+  param_check_missing <- param_check %>%
+    count(METHOD_NAME, UNIT, LABORATORY)
+  message("Methods for the following parameters were not found: ", paste(unique(param_check$METHOD_NAME), collapse = ", ")) 
+  warning(nrow(param_check_missing), " methods not found - can be either NAME or UNIT that was not found. Check 'param_check_missing'") 
+}
+
+if (F){
+  search_lookup_methodid(c("ZN","HG"), "NILU", "BIOTA")
+  search_lookup_methodid("2,2-bisphenol", "NILU", "BIOTA", exact = FALSE)
+  search_lookup_methodid("2,4-bisphenol", "NILU", "BIOTA", exact = FALSE)
+  search_lookup_methodid("L10", "NILU", "BIOTA", exact = FALSE)
+  search_lookup_methodid("phosphanyl", "NILU", "BIOTA", exact = FALSE)
+  search_lookup_methodid("V", "NILU", "BIOTA", exact = FALSE)
+  search_lookup_methodid("BDE", "NILU", "BIOTA", exact = FALSE)
+  search_lookup_methodid("Mn", "NILU", "BIOTA", exact = FALSE)
+
+}
+
+```
+
+### Fixing parameter names and units   
+
+```{r}
+
+# c("2,2-Bisphenol F", "2,4-Bisphenol F", "2,4-Bisphenol S", "4-[2-(4-{[benzyl(triphenyl)-lambda~5~-phosphanyl]oxy}phenyl)-1,1,1,3,3,3-hexafluoropropan-2-yl]phenol", 
+# "4,4-Bisphenol F", "Ag", "As", "BCPS", "BDE190", "Cd", "Co", 
+# "Cr", "Cu", "d13CVPDP", "d15NAIR", "Fe", "L10", "L6", "L7", "L8", 
+# "L9", "LCCP", "Mn", "Ni", "Pb", "Sb", "Sn", "V", "Zn")
+
+#
+# Bisphenol with un-capital B
+#
+
+x <- c("2,2-Bisphenol F", "2,4-Bisphenol F", "2,4-Bisphenol S", "4,4-Bisphenol F")
+# In data, change METHOD_NAME
+sel <- dat_biota$METHOD_NAME %in% x
+dat_biota[sel,]$METHOD_NAME <- sub("Bisphenol", "bisphenol", 
+                                              dat_biota[sel,]$METHOD_NAME)
+# In parameters, change NAME
+sel <- dat_biota_parameters_nilu$NAME %in% x
+dat_biota_parameters_nilu[sel,]
+dat_biota_parameters_nilu[sel,]$NAME <- sub("Bisphenol", "bisphenol", 
+                                              dat_biota_parameters_nilu[sel,]$NAME)
+#
+# Use d13C and d15N
+#
+x <- c("d13CVPDP", "d15NAIR")
+# In data, change METHOD_NAME
+sel <- dat_biota$METHOD_NAME %in% x
+dat_biota[sel,]$METHOD_NAME <- sub("d13CVPDP", "d13C",  dat_biota[sel,]$METHOD_NAME)
+dat_biota[sel,]$METHOD_NAME <- sub("d15NAIR", "d15N",  dat_biota[sel,]$METHOD_NAME)
+dat_biota[sel,]$UNIT <- "‰"
+# In parameters: Already changed manually in excel file
+
+#
+# All metals except Hg: change UNIT to 'µg/g w.w.'   
+# - also need to change values, of course  
+#
+x <- c("Ag", "As", "Cd", "Co", "Cr", "Cu", "Fe", "Mn", "Ni", "Pb", "Sb", "Sn", "Zn", "V")
+
+# In data, change UNIT and VALUE
+sel <- dat_biota$METHOD_NAME %in% x
+table(dat_biota[sel,]$UNIT)
+dat_biota[sel,]$UNIT <- sub("ng/g", "µg/g", dat_biota[sel,]$UNIT)
+dat_biota[sel,]$VALUE <- dat_biota[sel,]$VALUE/1000
+table(dat_biota[sel,]$UNIT)
+
+# In parameters, change UNIT 
+sel <- dat_biota_parameters_nilu$NAME %in% x
+dat_biota_parameters_nilu[sel,]
+dat_biota_parameters_nilu[sel,]$UNIT <- sub("ng/g", "µg/g", dat_biota_parameters_nilu[sel,]$UNIT)
+
+#
+# Change BDE190 to BDE-190 and Mn to MN
+# - for the long name, chnage to ECHA name (https://echa.europa.eu/registration-dossier/-/registered-dossier/24959/1/1)
+# - deleted ' (1:1)' in the end
+# - found using CAS 75768-65-9 (from Milfersk 2021 report, NIVA 7794-2022)
+# - similar name (containing 'Benzyltriphenylphosphonium' also found in https://www.chemsrc.com/en/cas/75768-65-9_544873.html)
+# 
+# (they are not in the existing methods anyway, but will be added with a logical names)
+
+list_names <- c("BDE-190" = "BDE190", 
+                "MN" = "Mn",
+                "Benzyltriphenylphosphonium, salt with 4,4-[2,2,2-trifluoro-1-(trifluoromethyl)ethylidene]bis[phenol]"  = "4-[2-(4-{[benzyl(triphenyl)-lambda~5~-phosphanyl]oxy}phenyl)-1,1,1,3,3,3-hexafluoropropan-2-yl]phenol")
+for (i in seq_along(list_names)){
+  x <- list_names[i]
+  y <- names(list_names)[i]
+  # In data, change METHOD_NAME
+  sel <- dat_biota$METHOD_NAME %in% x
+  dat_biota[sel,]$METHOD_NAME <- y
+  # In parameters, change NAME
+  sel <- dat_biota_parameters_nilu$NAME %in% x
+  dat_biota_parameters_nilu[sel,]
+  dat_biota_parameters_nilu[sel,]$NAME <- y
+}
+
+```
+
+### Check again  
+```{r}
+
+### Get parameter ID  
+
+lookup_methodid_biota_nilu <- get_lookup_methodid(dat_biota_parameters_nilu, lab = 'NILU', matrix = 'BIOTA')
+lookup_methodid_biota_ife <- get_lookup_methodid(dat_biota_parameters_ife, lab = 'IFE', matrix = 'BIOTA')
+
+lookup_methodid_biota <- bind_rows(
+  lookup_methodid_biota_nilu,
+  lookup_methodid_biota_ife
+)
+
+param_check <- dat_biota %>% 
+  anti_join(lookup_methodid_biota["NAME"], 
+            by = c("METHOD_NAME"="NAME")
+  )
+
+if (nrow(param_check) == 0){
+  message("All methods (NAME, UNIT, LABORATORY, MATRIX) found in METHOD_DEFINITIONS")
+} else {
+  param_check_missing <- param_check %>%
+    count(METHOD_NAME, UNIT, LABORATORY)
+  message("Methods for the following parameters were not found: ", paste(unique(param_check$METHOD_NAME), collapse = ", ")) 
+  warning(nrow(param_check_missing), " methods not found - can be either NAME or UNIT that was not found. Check 'param_check_missing'") 
+}
+
+```
+
+### Add rows to METHOD_DEFINITIONS   
+
+#### Make data for adding to METHOD_DEFINITIONS   
+```{r}
+
+df_methods_to_add_bio <- bind_rows(
+  dat_biota_parameters_nilu,
+  dat_biota_parameters_ife) %>%
+  filter(NAME %in% unique(param_check$METHOD_NAME))
+
+df_methods_to_add_bio$MATRIX <- "BIOTA"
+df_methods_to_add_bio$MATRIX_ID <- 1
+df_methods_to_add_bio$CAS <- NA
+# CAS fro the long one specified
+sel <- df_methods_to_add_bio$NAME %in% "Benzyltriphenylphosphonium, salt with 4,4-[2,2,2-trifluoro-1-(trifluoromethyl)ethylidene]bis[phenol]"
+df_methods_to_add_bio$CAS[sel] <- "75768-65-9"
+
+df_methods_to_add_bio$METHOD_REF <- NA
+
+```
+
+#### Make SQLs    
+
+PASTE INTO SQL DEVELOPER TO ADD THE RECORDS    
+
+- Need NAME, UNIT, LABORATORY, METHOD_REF, MATRIX, CAS, MATRIX_ID  
+Note to DHJ: use "SQL developer (latest version)" from desktop. Don't use the start menu.  
+- remember `commit;` after running the insert sentences  
+
+```{r}
+
+sql_list <- 1:nrow(df_methods_to_add_bio) %>% 
+  map_chr(make_sql_methods, data = df_methods_to_add_bio)
+sql <- paste(sql_list, collapse = ";\n")
+sql <- paste0(sql, ";\n")  
+writeLines(sql, "clipboard")  # copies SQLs to clipboard - go to SQL Developer and paste
+
+cat("Number of SQLs: \n")
+length(sql_list)  # 9
+
+
+cat("\nSample of SQLs: \n")
+sql_list[1:3]
+
+```
+
+
+### Check again  
+```{r}
+
+### Get parameter ID  
+
+lookup_methodid_biota_nilu <- get_lookup_methodid(dat_biota_parameters_nilu, lab = 'NILU', matrix = 'BIOTA')
+lookup_methodid_biota_ife <- get_lookup_methodid(dat_biota_parameters_ife, lab = 'IFE', matrix = 'BIOTA')
+
+lookup_methodid_biota <- bind_rows(
+  lookup_methodid_biota_nilu,
+  lookup_methodid_biota_ife
+)
+
+param_check <- dat_biota %>% 
+  anti_join(lookup_methodid_biota["NAME"], 
+            by = c("METHOD_NAME"="NAME")
+  )
+
+if (nrow(param_check) == 0){
+  message("All methods (NAME, UNIT, LABORATORY, MATRIX) found in METHOD_DEFINITIONS")
+} else {
+  param_check_missing <- param_check %>%
+    count(METHOD_NAME, UNIT, LABORATORY)
+  message("Methods for the following parameters were not found: ", paste(unique(param_check$METHOD_NAME), collapse = ", ")) 
+  warning(nrow(param_check_missing), " methods not found - can be either NAME or UNIT that was not found. Check 'param_check_missing'") 
+}
+
+
+```
+
+## 3. Biota - add measurements to Nivabasen  
+
+### Get sample IDs  
+
+```{r}
+
+lookup_sampleid_bio <- get_nivabase_selection(
+  columns = "LABWARE_TEXT_ID, BIOTA_SAMPLE_ID", 
+  table = "LABWARE_BSID", selection_column = "LABWARE_TEXT_ID", 
+  selection_values = unique(dat_biota$REMARK), values_are_text = TRUE)
+
+dat_biota_samples <- dat_biota %>%
+  count(STATION_CODE, SPECIMEN, TISSUE, REPNO, REMARK) %>%
+  left_join(lookup_sampleid_bio, by = join_by(REMARK == LABWARE_TEXT_ID))
+
+xtabs(~is.na(BIOTA_SAMPLE_ID), dat_biota_samples)
+xtabs(~paste(STATION_CODE, SPECIMEN, TISSUE) + is.na(BIOTA_SAMPLE_ID), dat_biota_samples)
+
+```
+
+### Check Nivabasen  
+
+```{r}
+
+
+
+
+```
+
+
+## 4. Sediment - data and parameters    
+
+```{r}
+
+dir("Input_data/2022")
+
+dat_sediment_nilu <- read_excel("Input_data/2022/Importmal_extern_sediment_nilu_2022.xlsx")
+dat_sediment_ife <- read_excel("Input_data/2022/Importmal_extern_sediment_ife_2022.xlsx")
+
+dat_sediment <- bind_rows(
+  dat_sediment_nilu,
+  dat_sediment_ife
+)
+
+```
+
+
+### Sediment parameters  
+
+```{r}
+
+dat_sediment_parameters_nilu <- read_excel(
+  "Input_data/2022/Importmal_extern_sediment_parameters_nilu_2022.xlsx")  
+dat_sediment_parameters_ife <- read_excel(
+  "Input_data/2022/Importmal_extern_sediment_parameters_ife_2022.xlsx")  
+
+```
+
+
+
+### Sediment  
+```{r}
+
+lookup_methodid_sediment_nilu <- get_lookup_methodid(dat_sediment_parameters_nilu, 
+                                                     lab = 'NILU', matrix = 'SEDIMENT')
+lookup_methodid_sediment_ife <- get_lookup_methodid(dat_sediment_parameters_ife, 
+                                                    lab = 'IFE', matrix = 'SEDIMENT')
+
+search_lookup_methodid("TOC", lab = 'IFE', matrix = 'SEDIMENT')
+
+search_lookup_methodid("TOC", lab = 'IFE', matrix = 'SEDIMENT', exact = FALSE)
+debugonce(search_lookup_methodid)
+search_lookup_methodid("TOC", lab = 'IFE', matrix = NA, exact = FALSE)
+
+lookup_methodid_sediment <- bind_rows(
+  lookup_methodid_sediment_nilu,
+  lookup_methodid_sediment_ife
+)
+
+```
+
+
+
+## 7. Add sample ID from Nivabasen  
+
+### Download SAMPLE_IDs   
+
+- ONE-TIME JOB (therefore wrapped in "if FALSE")
+- gets data from Nivabase and save it   
+
+```{r}
+
+if (FALSE){
+  
+  # - ONE-TIME JOB (therefore wrapped in "if FALSE") - if already done, read the saved files (next chunk)
+  
+  library(niRvana)  
+  
+  # Check column names:
+  # check2 <- get_nivabase_data("select * from NIVADATABASE.LABWARE_BSID where rownum < 100")  
+  # check3 <- get_nivabase_data("select * from NIVADATABASE.LABWARE_WSID where rownum < 100")
+  # check4 <- get_nivabase_data("select * from NIVADATABASE.LABWARE_SLICE_ID where rownum < 100")
+  
+  lookup_sampleid_bio <- get_nivabase_selection(
+    columns = "LABWARE_TEXT_ID, BIOTA_SAMPLE_ID", 
+    table = "LABWARE_BSID", selection_column = "LABWARE_TEXT_ID", 
+    selection_values = unique(df_nilu_01$LIMS.NR), values_are_text = TRUE)
+
+  lookup_sampleid_wat <- get_nivabase_selection(
+    columns = "LABWARE_TEXT_ID, WATER_SAMPLE_ID", 
+    table = "LABWARE_WSID", selection_column = "LABWARE_TEXT_ID", 
+    selection_values = unique(df_nilu_01$LIMS.NR), values_are_text = TRUE)
+  
+  # THIS TABLE DOESN'T WORK! (the slice ID is completely wrong)  
+  lookup_sampleid_sed <- get_nivabase_selection(
+    columns = "*", 
+    table = "LABWARE_SLICE_ID", selection_column = "LABWARE_TEXT_ID", 
+    selection_values = unique(df_nilu_01$LIMS.NR), values_are_text = TRUE)
+  
+  # lookup_sampleid_sed <- get_nivabase_data(
+  #   "select * from NIVADATABASE.LABWARE_SLICE_ID where LABWARE_TEXT_ID = 'NR-2020-08173'")
+  
+  
+  write.csv(lookup_sampleid_bio, "Input_data/2021//lookup_sampleid_2020-21_bio.txt", row.names = FALSE)
+  write.csv(lookup_sampleid_wat, "Input_data/2021//lookup_sampleid_2020-21_wat.txt", row.names = FALSE)
+  write.csv(lookup_sampleid_sed, "Input_data/2021//lookup_sampleid_2020-21_sed.txt", row.names = FALSE)
+  
+}
+
+```
+
+```{r}
+
+options(old_options)
+
+```
+

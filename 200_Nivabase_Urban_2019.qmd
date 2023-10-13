@@ -104,7 +104,7 @@ message("No. of samples, water: ", nrow(df_samples_water))
 
 # debugonce(get_water_chemistry_from_stations)
 dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), sampling_year)
-
+message("No. of measurements, water: ", nrow(dat_nb_water))
 
 df_samples_sediment <- get_nivabase_selection(
   "*",
@@ -147,17 +147,19 @@ message("No. of specimens, biota: ", nrow(df_specimens))
 # get_nivabase_data("select * from NIVADATABASE.LABWARE_WSID where rownum < 6")  
 # get_nivabase_data("select * from NIVADATABASE.LABWARE_SLICE_ID where rownum < 6")  
 
-unique(dat_nb_biota$SAMPLE_ID)
+# unique(dat_nb_biota$SAMPLE_ID)
 
 dat_lab_biota <- get_nivabase_selection(
   c("BIOTA_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
   "LABWARE_BSID", 
   "BIOTA_SAMPLE_ID", unique(dat_nb_biota$SAMPLE_ID)) 
-# NO WATER at this stage  
+
+# No measurements in water 
 # dat_lab_water <- get_nivabase_selection(
 #   c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-#   "LABWARE_WSID", 
-#   "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID)) 
+#   "LABWARE_WSID",
+#   "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID))
+
 dat_lab_sediment <- get_nivabase_selection(
   c("SLICE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
   "LABWARE_SLICE_ID", 
