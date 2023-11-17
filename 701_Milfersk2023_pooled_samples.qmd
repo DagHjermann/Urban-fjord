@@ -13,6 +13,8 @@ library(lubridate)
 library(readxl)
 library(ggplot2)
 library(tidyr)
+library(NADA2)       # for regression with data under LOQ 
+# help(package = "NADA2")
 
 source("701_Milfersk2023_pooled_samples_functions.R")
 
@@ -21,6 +23,8 @@ source("701_Milfersk2023_pooled_samples_functions.R")
 
 ## Data  
 
+### Concentrations  
+
 ```{r}
 
 dat_orig1 <- read.csv("Milfersk/Data_combined/001 MF Mjøsa  stack.txt")
@@ -28,7 +32,12 @@ dat_orig1 <- read.csv("Milfersk/Data_combined/001 MF Mjøsa  stack.txt")
 # xtabs(~Label, dat_orig1)
 xtabs(~Label, dat_orig1 %>% filter(grepl("138", Label)))
 
-# Add substamce names (Identifier) and area, species, tissue, year
+```
+
+### Add substance names (Identifier) and area, species, tissue, year
+
+```{r}
+
 lookup_label <- read.csv("Milfersk/Data_combined/002 Combined Compounds.txt")
 lookup_sample <- read.csv("Milfersk/Data_combined/003 MF samples.txt")
 
@@ -41,6 +50,12 @@ dat_orig2 <- dat_orig1 %>%
 if (nrow(dat_orig2) > nrow(dat_orig1))
   stop("Check data - left join increased no. of rows")
 
+```
+
+### Bunch of tables  
+
+```{r}
+
 table(addNA(lookup_sample$Area))
 table(addNA(dat_orig2$MYEAR))
 table(addNA(dat_orig2$Area))
@@ -48,6 +63,12 @@ table(addNA(dat_orig2$Species.2))
 xtabs(~addNA(Species.2) + addNA(Tissue), dat_orig2)
 xtabs(~addNA(MYEAR), dat_orig2)
 xtabs(~addNA(Tissue) + addNA(MYEAR), dat_orig2 %>% filter(Species.2 %in% c("Brown trout", "Abbor -muskel")))
+
+```
+
+### Extract year - TEST
+
+```{r}
 
 # Extract year - TEST
 x <- stringr::str_extract(dat_orig2$LIMS.NR, "20[1-2][0-9]")
@@ -64,6 +85,11 @@ xtabs(~Identifier + addNA(Data.availability),
 xtabs(~addNA(Data.availability) + addNA(MYEAR), 
       dat_orig2)
 
+```
+
+
+### Add year + species + flag 
+```{r}
 
 dat <- dat_orig2 %>%
   mutate(
@@ -135,5 +161,59 @@ ggplot(test, aes(Year, Conc, color = Sampling)) +
 
 ```
 
+## Get Coefficient of variation       
 
+```{r}
+
+test2 <- test %>% 
+  filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE99")
+
+test2 %>%
+  group_by(Sampling) %>%
+  summarise(
+    sd = sd(Conc, na.rm = TRUE),
+    mean = mean(test2$Conc), 
+    cv = sd/mean
+  )
+
+
+```
+
+
+## Simulate time series         
+
+* For power calculations   
+* For a given substance, matrix (?), length of time series, and annual change in mean (% change per year)     
+    - Get mean for each year  
+    - Draw a random year's data for each year (with replacement)  
+    - Adjust that data to the mean for each year  
+    - Feed those data into 'get_combined_data' so we also get the data for the pooled case  
+    - Run linear regression, collect regression statistics  
+* Repeat for several percentage annyual change, length of time series, etc.   
+
+
+### Nada regression on the original data  
+```{r}
+
+test <- dat %>% 
+  filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE126") %>%
+  mutate(log_conc = log(VALUE))
+ggplot(test, aes(Year, VALUE, color = is.na(FLAG1))) +
+  geom_point()
+sim_get_regression_results(test, method = "NADA")
+
+```
+
+```{r}
+
+data_sim1 <- sim_get_rawdata(test, yvar = "VALUE", n_years = 10, change = 0.1, mean = 5, extravars = "FLAG1")
+sim_get_regression_results(test, method = "NADA")
+
+```
+
+
+
+```{r}
+
+```
 

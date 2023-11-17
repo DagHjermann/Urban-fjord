@@ -164,7 +164,9 @@ if (FALSE){
 #
 
 get_combined_data <- function(params, species, station, tissue, year, no_samples, no_draws,
-                              data, under_loq_treatement = "random between LOQ/2 and LOQ"){
+                              data, 
+                              under_loq_treatement = "random between LOQ/2 and LOQ",
+                              detrended = TRUE){
   data_orig <- data %>% 
     mutate(Draw = as.character(NA), 
            Pooled_sample = as.character(NA)) %>%
@@ -174,9 +176,13 @@ get_combined_data <- function(params, species, station, tissue, year, no_samples
            TISSUE_NAME %in% tissue,
            Year %in% year) %>% 
     select(LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, SAMPLE_ID, NAME, VALUE, FLAG1) %>%
-    rename(Conc = VALUE) %>%
-    mutate(
-      Strategy = "Single", Sampling = "Single", .before = everything())
+    rename(Conc = VALUE)
+  
+  if (detrended){
+    data_orig <- get_detrended(data_orig) %>%
+      mutate(
+        Strategy = "Single", Sampling = "Single", .before = everything())
+  }
 
   data_pooled <- draw_pooled_means(params=params, species=species, station=station, tissue=tissue, 
                                    year = year, no_samples=no_samples, data=data, no_draws=no_draws,
@@ -203,6 +209,7 @@ if (FALSE){
   # params, species, station, tissue, year, no_samples, no_draws
   # test <- get_combined_data("PFOS", 
   #                   "Salmo trutta", "Femunden", "Muskel", 2018, 4, 2, data = dat)  
+  debugonce(get_combined_data)
   test <- get_combined_data(c("PFOSA", "PFOS"), 
                     "Brown trout", "Mjøsa", "Muscle", 2019, 4, 2, data = dat)  
   test
@@ -211,6 +218,88 @@ if (FALSE){
     facet_wrap(vars(NAME), scales = "free_y")
   
 }
+
+get_cv_one_series <- function(data, cv_analytic){
+  
+}
+
+
+
+get_detrended_one_series <- function(params, species, station, tissue, data){
+  if (length(params) > 1)
+    stop("Max. one parameter!")
+  result <- data %>% 
+    filter(NAME %in% params,
+           LATIN_NAME %in% species, 
+           STATION_NAME %in% station, 
+           TISSUE_NAME %in% tissue,
+           # Year %in% year,
+           !is.na(Conc)
+    ) %>% 
+    select(LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, SAMPLE_ID, NAME, Conc, FLAG1)
+  mod <- lm(Conc ~ Year, result)
+  # data_orig$Conc_orig <- data_orig$Conc
+  # data_orig$Conc <- data_orig$Conc_orig - predict(mod) + mean(data_orig$Conc_orig)
+  # data_orig
+  mean_conc <- result %>% pull(Conc) %>% mean()
+  fitted_conc <- predict(mod)
+  result %>%
+    mutate(
+      Conc_orig = Conc,
+      Conc = Conc_orig - fitted_conc + mean_conc
+    )
+}
+
+if (FALSE){
+  # debugonce(get_detrended_one_series)
+  test <- get_detrended_one_series("PFOS", "Brown trout", "Mjøsa", "Muscle", data = dat %>% rename(Conc = VALUE))  
+  test <- get_detrended_one_series("BDE99", "Brown trout", "Mjøsa", "Muscle", data = dat %>% rename(Conc = VALUE))  
+  # test
+  ggplot(test, aes(Year)) +
+    geom_point(aes(y = Conc_orig, shape = is.na(FLAG1))) +
+    geom_point(aes(y = Conc, shape = is.na(FLAG1)), color = "red")
+}
+
+
+get_detrended <- function(data){
+  data_orig <- data %>% 
+    filter(!is.na(Conc))
+  df_series <- data_orig %>%
+    distinct(NAME, LATIN_NAME, STATION_NAME, TISSUE_NAME)  
+  n <- nrow(df_series)
+  result <- map_dfr(
+    1:n,
+    \(i) get_detrended_one_series(
+      params = df_series$NAME[i],
+      species = df_series$LATIN_NAME[i],
+      station = df_series$STATION_NAME[i],
+      tissue = df_series$TISSUE_NAME[i],
+      data = data_orig)  
+  )
+  result
+}
+
+if (FALSE){
+  # debugonce(get_detrended)
+  test_data <- dat %>% 
+    filter(
+      NAME %in% c("BDE99", "PFOS"),
+      LATIN_NAME %in% "Brown trout", 
+      STATION_NAME %in% "Mjøsa", 
+      TISSUE_NAME %in% "Muscle") %>%
+    rename(Conc = VALUE) 
+  test <- get_detrended(data = test_data)  
+  # test
+  table(test$NAME)
+  ggplot(test, aes(Year)) +
+    geom_jitter(aes(y = Conc_orig, shape = is.na(FLAG1))) +
+    geom_jitter(aes(y = Conc, shape = is.na(FLAG1)), color = "red") +
+    facet_wrap(vars(NAME))
+  test %>% filter(NAME == "BDE99") %>% lm(Conc ~ Year, .) %>% summary()  # no remaining time trend
+  test %>% filter(NAME == "PFOS") %>% lm(Conc ~ Year, .) %>% summary()
+}
+
+
 
 
 #
@@ -279,3 +368,118 @@ if (FALSE){
     facet_wrap(vars(NAME))
 
 }
+
+
+sim_get_means <- function(n_years, change, mean){
+  x <- 1:n_years
+  y_1 <- change*(x-x[1])
+  y <- y_1 - mean(y_1) + mean
+  data.frame(x, y)
+}
+
+if (FALSE){
+  sim_get_means(10, change = 0.2, mean = 5)
+}
+
+# NOTE: year must be called "Year"  
+sim_get_rawdata_oneyear <- function(data, year, x, yvar, adjusted_mean = 0, extravars = NULL){
+  result <- data %>% filter(Year %in% year) %>% mutate(x = x, .before = 1)
+  result$y_sim <- result[[yvar]] - mean(result[[yvar]]) + adjusted_mean
+  result[c("x", "Year", yvar, "y_sim", extravars)]
+}
+
+if (FALSE){
+  test1 <- data.frame(Year = 1991:2020, variable = 1:30) 
+  test2 <- data.frame(Year = rep(1991:2020, each = 3), variable = rep(1:30, each = 3) + rep(c(-0.1,0,0.1), 30))
+  sim_get_rawdata_oneyear(test2, year = 2000, x = 1, yvar = "variable", adjusted_mean = 4)
+  # real data
+  dat %>% filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle") %>%
+    mutate(over_loq = is.na(FLAG1)) %>%
+    count(NAME, over_loq)
+  test3 <- dat %>% filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE126")
+  ggplot(test3, aes(Year, VALUE, color = is.na(FLAG1))) +
+    geom_point()
+  sim_get_rawdata_oneyear(test3, year = 2021, x = 1, yvar = "VALUE", adjusted_mean = 4, extravars = "FLAG1")
+}
+
+sim_get_rawdata <- function(data, yvar = "VALUE", n_years, change, mean = 2, extravars = NULL){
+  means <- sim_get_means(n_years=n_years, change=change, mean=mean)
+  n <- nrow(means)
+  yrs_pick <- data %>%
+    pull(Year) %>%
+    unique() %>%
+    sample(size = n, replace = TRUE)
+  1:n %>% map_dfr(
+    \(i) {
+      sim_get_rawdata_oneyear(data, year = yrs_pick[i], x = i, yvar = yvar, adjusted_mean = means$y[i], extravars = extravars)
+    }
+  )
+}
+
+if (FALSE){
+  # test data
+  test1 <- data.frame(Year = 1991:2020, variable = 1:30)
+  test2 <- data.frame(Year = rep(1991:2020, each = 3), variable = rep(1:30, each = 3))
+  # debugonce(sim_get_rawdata)
+  # debugonce(sim_get_rawdata_oneyear)
+  sim_get_rawdata(test2, yvar = "variable", n_years = 10, change = 0.2, mean = 7)
+  # real data
+  test3 <- dat %>% filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE126")
+  result <- sim_get_rawdata(test3, yvar = "VALUE", n_years = 3, change = 0.2, mean = 5, extravars = "FLAG1")
+  ggplot(result, aes(x = Year, y = VALUE, color = FLAG1)) + geom_point()
+  ggplot(result, aes(x = x, y = y_sim, color = FLAG1)) + geom_point()
+}
+
+#
+# Get regression results (on log scale)\
+# - using oridnary regression (on all data, ignoring the FLAG1 ciolumn) or NADA::cencorreg
+# - note that cencorreg uses log-transformed data by default
+#
+
+sim_get_regression_results <- function(data, xvar = "Year", 
+                                       yvar = "VALUE", 
+                                       flagvar = "FLAG1", 
+                                       method = "lm",
+                                       LOG = TRUE){
+  data$y <- data[[yvar]]
+  data$x <- data[[xvar]]
+  if (method == "lm"){
+    if (LOG){
+      data$y <- log(data$y)
+    }
+    mod <- lm(y~x, data)
+    result <- summary(mod)$coef[2,]
+    names(result)[4] <- "pvalue"
+  } else if (method == "NADA"){
+    data$censored <- !is.na(data[[flagvar]])
+    X <- cencorreg(data$y, data$censored, data$x, LOG = LOG, verbose = 0)
+    Estimate <- summary(X)$table[2, 1]
+    Std_error <- summary(X)$table[2, 2]
+    loglik1 <- X$loglik[1]
+    loglik2 <- X$loglik[1]
+    chisq <- 2*diff(X$loglik)
+    pvalue <- pchisq(chisq, df = 1, lower.tail = FALSE)
+    result <- data.frame(Estimate, Std_error,  loglik1, loglik2, chisq, pvalue)
+  }
+  result
+}
+
+if (FALSE){
+
+  test3 <- dat %>% 
+    # filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE99") %>%
+    filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE126") %>%
+    mutate(log_conc = log(VALUE))
+  ggplot(test3, aes(Year, log_conc, color = is.na(FLAG1))) +
+    geom_point()
+  # debugonce(sim_get_regression_results)
+  sim_get_regression_results(test3)
+  sim_get_regression_results(test3, method = "NADA")
+
+}
+
+
+
+
+
+
