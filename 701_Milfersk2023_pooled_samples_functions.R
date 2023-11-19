@@ -54,7 +54,7 @@ if (FALSE){
 #
 
 draw_concentrations <- function(params, ..., data = dat){
-  samples <- draw_samples(..., data = dat)  
+  samples <- draw_samples(..., data = data)  
   names(samples) <- seq_along(samples)
   data <- ungroup(data)
   map_dfr(samples, 
