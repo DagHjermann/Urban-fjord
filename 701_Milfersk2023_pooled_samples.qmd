@@ -13,10 +13,14 @@ library(lubridate)
 library(readxl)
 library(ggplot2)
 library(tidyr)
+library(forcats)     # fct_rev()
+library(broom)       # for tidy()
 library(NADA2)       # for regression with data under LOQ 
 # help(package = "NADA2")
 
 source("701_Milfersk2023_pooled_samples_functions.R")
+
+
 
 ```
 
@@ -52,6 +56,18 @@ if (nrow(dat_orig2) > nrow(dat_orig1))
 
 ```
 
+#### Length and weight    
+
+```{r}
+
+table(is.na(lookup_sample$Length..cm.))
+
+xtabs(~MYEAR + is.na(Length..cm.), lookup_sample)
+xtabs(~MYEAR + is.na(Weight..g.), lookup_sample)
+
+```
+
+
 ### Bunch of tables  
 
 ```{r}
@@ -79,6 +95,7 @@ xtabs(~addNA(LOQ == 1) + addNA(MYEAR),
 
 xtabs(~addNA(Data.availability) + addNA(MYEAR), 
       dat_orig2 %>% filter(Species.2 %in% c("Brown trout", "Abbor -muskel")))
+
 xtabs(~Identifier + addNA(Data.availability), 
       dat_orig2 %>% filter(Species.2 %in% c("Brown trout", "Abbor -muskel")))
 
@@ -117,7 +134,442 @@ xtabs(~addNA(TISSUE_NAME) + addNA(Year), dat %>% filter(LATIN_NAME %in% "Brown t
 
 ```
 
-## Testing  
+
+
+## Get Coefficient of variation       
+
+### Original data  
+
+#### Usable trout time series   
+
+
+
+```{r}
+
+df_series_1 <- dat %>%
+  filter(LATIN_NAME %in% "Brown trout") %>%      # trout only
+  group_by(LATIN_NAME, TISSUE_NAME, NAME, STATION_NAME) %>%
+  summarize(
+    n_tot = n(),
+    quant_tot = sum(is.na(FLAG1))
+  )
+#  df_series_1
+
+df_series_2 <- dat %>%
+  filter(LATIN_NAME %in% "Brown trout") %>%
+  group_by(LATIN_NAME, TISSUE_NAME, NAME, STATION_NAME, Year) %>%
+  summarize(
+    quant_year = sum(is.na(FLAG1)), .groups = "drop_last") %>%
+  summarize(
+    years_quant = sum(quant_year > 0), .groups = "drop")
+# df_series_2  
+
+df_series_all <- df_series_1 %>% 
+  left_join(df_series_2) %>%
+  mutate(
+    include = (quant_tot >= 20 & years_quant >= 6))
+
+table(df_series_all$quant_tot >= 20)
+table(df_series_all$years_quant >= 6)
+table(df_series_all$TISSUE_NAME, df_series_all$include)
+
+df_series_sel1 <- df_series_all %>%
+  filter(include)
+
+```
+
+#### Test plots  
+```{r}
+
+ggplot(dat %>% semi_join(df_series_sel1[1:15,]), 
+       aes(Year, VALUE, color = is.na(FLAG1))) +
+  geom_point() +
+  facet_wrap(vars(NAME), scales = "free_y")
+
+ggplot(dat %>% semi_join(df_series_sel1[16:26,]), 
+       aes(Year, VALUE, color = is.na(FLAG1))) +
+  geom_point() +
+  facet_wrap(vars(NAME), scales = "free_y")
+
+```
+#### Remove non-monotonic  
+
+```{r}
+
+df_series_sel <- df_series_sel1 %>%
+  filter(!NAME %in% c("D6", "TBA"))
+
+# Order
+# unique(df_series_sel$NAME) %>% dput()
+name_order <- c(
+  "Hg", "BDE17", "BDE28", "BDE47", "BDE49",  "BDE66", "BDE77", "BDE99", "BDE100", "BDE119", 
+  "BDE126", "BDE153", "BDE154", "BDE183", "BDE184", "BDE202", "BDE209", 
+  "D4", "D5", "PFDoDA", "PFOS", "PFTeDA", "PFTrDA", "PFUnDA")
+
+dat_sel <- dat %>%
+  semi_join(df_series_sel, by = join_by(NAME, STATION_NAME, TISSUE_NAME, LATIN_NAME)) %>%
+  # rename(Conc = VALUE) %>%
+  mutate(NAME = factor(NAME, levels = name_order))
+
+```
+
+
+### Remove between year variation  
+
+```{r}
+
+dat_detrend <- get_detrended(data = dat_sel)  
+
+# Note: detrended values is named 'Conc'  S
+ggplot(dat_detrend %>% semi_join(df_series_sel[1:15,]), 
+       aes(Year, VALUE, color = is.na(FLAG1))) +
+  geom_point() +
+  facet_wrap(vars(NAME), scales = "free_y")
+
+```
+
+
+
+
+### CVt  
+
+```{r}
+
+df_cv <- dat_detrend %>%
+  group_by(NAME) %>%
+  summarise(
+    sd = sd(VALUE, na.rm = TRUE),
+    mean = mean(VALUE), 
+    CVt = sd/mean*100
+  )
+
+ggplot(df_cv, 
+       aes(fct_rev(NAME), CVt)) +
+  geom_col() +
+  coord_flip()
+
+ggplot(df_cv %>% filter(CVt < 100), 
+       aes(fct_rev(NAME), CVt)) +
+  geom_col() +
+  coord_flip() 
+
+
+```
+
+## Regression on original trends  
+
+* Deleting all <LOQ data  
+
+### all years, unpooled data     
+
+```{r}
+
+mod <- dat_sel %>%
+  filter(is.na(FLAG1)) %>%  
+  split(.$NAME) %>%
+  map(\(data) lm(VALUE ~ Year, data = data))
+
+mod_coef <- mod %>%
+  map_dfr(\(model) as.data.frame(summary(model)$coefficients)[2,],
+      .id = "NAME") %>%
+  mutate(NAME = factor(NAME, levels = name_order))
+
+# Estimates + Std error, all
+ggplot(mod_coef, 
+       aes(fct_rev(NAME), Estimate)) +
+  geom_pointrange(aes(ymin = Estimate - 2*`Std. Error`, ymax = Estimate + 2*`Std. Error`)) +
+  geom_hline(yintercept = 0) +
+  coord_flip() 
+
+# Estimates + Std error, BDE  
+ggplot(mod_coef %>% filter(grepl("BDE", NAME)), 
+       aes(fct_rev(NAME), Estimate)) +
+  geom_pointrange(aes(ymin = Estimate - 2*`Std. Error`, ymax = Estimate + 2*`Std. Error`)) +
+  geom_hline(yintercept = 0) +
+  coord_flip() 
+
+# Estimates + Std error, PFAS  
+ggplot(mod_coef %>% filter(NAME %in% c("PFDoDA", "PFOS", "PFTeDA", "PFTrDA", "PFUnDA")), 
+       aes(fct_rev(NAME), Estimate)) +
+  geom_pointrange(aes(ymin = Estimate - 2*`Std. Error`, ymax = Estimate + 2*`Std. Error`)) +
+  geom_hline(yintercept = 0) +
+  coord_flip() 
+
+# t values
+ggplot(mod_coef, 
+       aes(fct_rev(NAME), `t value`)) +
+  geom_point() +
+  coord_flip() 
+
+```
+
+### until 2019, unpooled data        
+
+
+```{r}
+
+# 1st try, without {broom}
+
+# mod <- dat_sel %>%
+#   filter(is.na(FLAG1) & Year <= 2019) %>%  
+#   split(.$NAME) %>%
+#   map(\(data) lm(VALUE ~ Year, data = data))
+# 
+# mod_coef_unpooled <- mod %>%
+#   map_dfr(\(model) as.data.frame(summary(model)$coefficients)[2,],
+#       .id = "NAME") %>%
+#   mutate(NAME = factor(NAME, levels = name_order))
+
+# with {broom}
+mod_coef_unpooled_mod <- dat_sel %>%
+  filter(is.na(FLAG1) & Year <= 2019) %>%  
+  nest_by(NAME) %>%
+  mutate(model = list(lm(VALUE ~ Year, data = data)))
+
+mod_coef_unpooled <- mod_coef_unpooled_mod %>%
+  summarise(tidy(model), .groups = "drop")%>%
+  filter(term == "Year")
+
+# Estimates + Std error, all
+ggplot(mod_coef_unpooled, 
+       aes(fct_rev(NAME), estimate)) +
+  geom_pointrange(aes(ymin = estimate - 2*std.error, ymax = estimate + 2*std.error)) +
+  geom_hline(yintercept = 0) +
+  coord_flip() 
+
+# estimates + Std error, BDE  
+ggplot(mod_coef_unpooled %>% filter(grepl("BDE", NAME)), 
+       aes(fct_rev(NAME), estimate)) +
+  geom_pointrange(aes(ymin = estimate - 2*std.error, ymax = estimate + 2*std.error)) +
+  geom_hline(yintercept = 0) +
+  coord_flip() 
+
+# Estimates + Std error, PFAS  
+ggplot(mod_coef_unpooled %>% filter(NAME %in% c("PFDoDA", "PFOS", "PFTeDA", "PFTrDA", "PFUnDA")), 
+       aes(fct_rev(NAME), estimate)) +
+  geom_pointrange(aes(ymin = estimate - 2*std.error, ymax = estimate + 2*std.error)) +
+  geom_hline(yintercept = 0) +
+  coord_flip() 
+
+# t values
+ggplot(mod_coef_unpooled, 
+       aes(fct_rev(NAME), statistic)) +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = c(-2,2), linetype = "dashed") +
+  coord_flip() 
+
+```
+
+
+### until 2019, pooled data        
+
+
+#### Test for one year    
+
+* Including undere LOQ data
+
+```{r}
+
+test1 <- draw_concentrations(c("PFUnDA"), "Brown trout", "Mjøsa", "Muscle", 2018, 
+                     no_samples = 3, data = dat_sel)  
+
+test2 <- draw_pooled_means_single(c("PFUnDA"), "Brown trout", "Mjøsa", "Muscle", 2018, 
+                        no_samples = 3, data = dat_sel)  
+
+test3 <- draw_pooled_means(c("PFUnDA", "BDE99"), "Brown trout", "Mjøsa", "Muscle", 2018, 
+                  no_samples = 3, no_draws = 10, 
+                  data = dat_sel)  
+
+test3b <- draw_pooled_means(c("PFUnDA", "BDE99"), "Brown trout", "Mjøsa", "Muscle", 2018:2019, 
+                  no_samples = 3, no_draws = 2, 
+                  data = dat_sel)  
+
+# Summarize mean over all draws  
+test4 <- test3 %>%
+  group_by(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, Pooled_sample) %>%
+  summarize(
+    VALUE = mean(VALUE),
+    Under_loq = mean(!is.na(FLAG1)))
+
+```
+
+#### Draw data for regression 
+
+* Excluding <LOQ data  
+
+```{r}
+
+unpooled_yrs <- dat_sel %>%
+  filter(Year <= 2019 & is.na(FLAG1)) %>%
+  pull(Year) %>%
+  unique()
+
+dat_pooled <- draw_pooled_means(name_order, "Brown trout", "Mjøsa", "Muscle", unpooled_yrs, 
+                  no_samples = 3, no_draws = 10, 
+                  data = dat_sel %>% filter(is.na(FLAG1)))  
+
+```
+
+#### Test plot  
+```{r}
+
+ggplot(dat_sel %>% filter(NAME == "BDE126" & Year <= 2019), 
+       aes(Year, VALUE, color = is.na(FLAG1))) +
+  geom_point()
+
+ggplot(dat_pooled %>% filter(NAME == "BDE126"), 
+       aes(Year, VALUE, color = is.na(FLAG1))) +
+  geom_point() +
+  facet_wrap(vars(Draw))
+
+```
+
+#### Perform regression  
+
+```{r}
+
+mod_coef_bydraw <- dat_pooled %>%
+  nest_by(NAME, Draw) %>%
+  mutate(model = list(lm(VALUE ~ Year, data = data))) %>%
+  summarise(tidy(model), .groups = "drop")%>%
+  filter(term == "Year")
+  
+# Estimates, BDE  
+ggplot(mod_coef_bydraw %>% filter(grepl("BDE", NAME)), 
+       aes(fct_rev(NAME), estimate)) +
+  geom_point() +
+  geom_point(data = mod_coef_unpooled %>% filter(grepl("BDE", NAME)), color = "red") +
+  geom_hline(yintercept = 0) +
+  coord_flip() 
+
+# t values
+ggplot(mod_coef_bydraw, 
+       aes(fct_rev(NAME), statistic)) +
+  geom_point() +
+  geom_point(data = mod_coef_unpooled, color = "red") +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = c(-2,2), linetype = "dashed") +
+  coord_flip() 
+
+
+```
+
+
+```{r}
+
+
+
+```
+
+```{r}
+
+
+  
+test <- map(all_yrs,
+            \(year) get_combined_data(c("PFUnDA"), 
+                    "Brown trout", "Mjøsa", "Muscle", year = year, 
+                    no_samples = 4, no_draws = 2, 
+                    data = dat_sel %>% filter(Year <= 2019))) %>%
+  list_rbind()
+
+# test
+ggplot(test, aes(Year, VALUE, color = Sampling)) +
+  geom_point(aes(shape = `LOQ status`)) +
+  scale_shape_manual(values = c("Over LOQ" = 16, "Under LOQ" = 6)) +
+  facet_grid(vars(NAME), vars(Sampling), scales = "free_y")
+
+
+```
+
+
+
+
+
+
+## Regression on manipulated trends   
+
+```{r}
+
+dat_test <- dat_sel %>% 
+  filter(NAME == "BDE126" & is.na(FLAG1) & Year <= 2019)
+
+# mod_test <- mod_coef_unpooled_mod %>%
+#   filter(NAME == "BDE126")
+# predict(mod_test$model)
+
+# Annual expected value, as observed
+mod <- lm(VALUE ~ Year, dat_test)
+df_yr <- dat_test %>% distinct(Year)
+df_means_orig <- data.frame(
+  Year = df_yr$Year, 
+  VALUE = predict(mod, df_yr))
+
+# Annual expected value, mean
+mean <- mean(dat_test$VALUE)
+df_means_new <- sim_get_means(2014:2019, change = 0, mean = mean)
+
+ggplot(dat_test, aes(Year, VALUE)) +
+  geom_point() +
+  geom_point(data = df_means_orig, color = "blue") +
+  geom_point(data = df_means_new, color = "red")
+
+dat_test_manip <- dat_test %>%
+  left_join(df_means_orig %>% rename(mean_orig = VALUE),
+            by = join_by(Year)) %>%
+  left_join(df_means_new %>% rename(mean_new = VALUE),
+            by = join_by(Year)) %>%
+  mutate(
+    VALUE_orig = VALUE,
+    VALUE = VALUE_orig - mean_orig + mean_new,
+  )
+
+# Test regression 
+mod_test <- lm(VALUE ~ Year, data = dat_test_manip)
+summary(mod_test)$coef
+
+cowplot::plot_grid(
+  ggplot(dat_test_manip, aes(Year, VALUE_orig)) +
+    geom_point(),
+  ggplot(dat_test_manip, aes(Year, VALUE)) +
+    geom_point(), nrow = 1)
+  
+```
+
+
+
+## Simulate time series         
+
+* For power calculations   
+* For a given substance, matrix (?), length of time series, and annual change in mean (% change per year)     
+    - Get mean for each year  
+    - Draw a random year's data for each year (with replacement)  
+    - Adjust that data to the mean for each year  
+    - Feed those data into 'get_combined_data' so we also get the data for the pooled case  
+    - Run linear regression, collect regression statistics  
+* Repeat for several percentage annyual change, length of time series, etc.   
+
+
+### Nada regression on the original data  
+```{r}
+
+test <- dat %>% 
+  filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE126") %>%
+  mutate(log_conc = log(VALUE))
+ggplot(test, aes(Year, VALUE, color = is.na(FLAG1))) +
+  geom_point()
+sim_get_regression_results(test, method = "NADA")
+
+```
+
+```{r}
+
+data_sim1 <- sim_get_rawdata(test, yvar = "VALUE", n_years = 10, change = 0.1, mean = 5, extravars = "FLAG1")
+sim_get_regression_results(test, method = "NADA")
+
+```
+
+## APPENDIX: Testing  
 
 ### Make data from random draws  
 
@@ -160,57 +612,6 @@ ggplot(test, aes(Year, Conc, color = Sampling)) +
 
 
 ```
-
-## Get Coefficient of variation       
-
-```{r}
-
-test2 <- test %>% 
-  filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE99")
-
-test2 %>%
-  group_by(Sampling) %>%
-  summarise(
-    sd = sd(Conc, na.rm = TRUE),
-    mean = mean(test2$Conc), 
-    cv = sd/mean
-  )
-
-
-```
-
-
-## Simulate time series         
-
-* For power calculations   
-* For a given substance, matrix (?), length of time series, and annual change in mean (% change per year)     
-    - Get mean for each year  
-    - Draw a random year's data for each year (with replacement)  
-    - Adjust that data to the mean for each year  
-    - Feed those data into 'get_combined_data' so we also get the data for the pooled case  
-    - Run linear regression, collect regression statistics  
-* Repeat for several percentage annyual change, length of time series, etc.   
-
-
-### Nada regression on the original data  
-```{r}
-
-test <- dat %>% 
-  filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE126") %>%
-  mutate(log_conc = log(VALUE))
-ggplot(test, aes(Year, VALUE, color = is.na(FLAG1))) +
-  geom_point()
-sim_get_regression_results(test, method = "NADA")
-
-```
-
-```{r}
-
-data_sim1 <- sim_get_rawdata(test, yvar = "VALUE", n_years = 10, change = 0.1, mean = 5, extravars = "FLAG1")
-sim_get_regression_results(test, method = "NADA")
-
-```
-
 
 
 ```{r}

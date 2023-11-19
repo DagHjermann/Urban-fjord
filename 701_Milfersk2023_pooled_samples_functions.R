@@ -42,6 +42,7 @@ if (FALSE){
   # debugonce(draw_samples)
   # draw_samples("Salmo trutta", "Femunden", "Muskel", 2020, 4, data = dat)  
 
+  draw_samples("Brown trout", "Mjøsa", "Muscle", 2018, 3, data = dat)  
   draw_samples("Brown trout", "Mjøsa", "Muscle", 2018, 4, data = dat)  
   draw_samples("Brown trout", "Mjøsa", "Muscle", 2018, 5, data = dat)  
   draw_samples("Brown trout", "Mjøsa", "Muscle", 2018, 6, data = dat)  
@@ -85,15 +86,15 @@ if (FALSE){
 
 draw_pooled_means_single <- function(..., under_loq_treatement = "random between LOQ/2 and LOQ"){
   data <- draw_concentrations(...)
-  data$Conc_for_mean <- data$VALUE
+  data$VALUE_for_mean <- data$VALUE
   # sel = the cases where concentration is < LOQ
   sel <- data$FLAG1 %in% "<"
   if (sum(sel) > 0){
     LOQ <- mean(data$VALUE[sel])
     if (under_loq_treatement == "random between LOQ/2 and LOQ"){
-      data$Conc_for_mean[sel] <- runif(sum(sel), data$VALUE[sel]/2, data$VALUE[sel])
+      data$VALUE_for_mean[sel] <- runif(sum(sel), data$VALUE[sel]/2, data$VALUE[sel])
     } else if (under_loq_treatement == "LOQ/2"){
-      data$Conc_for_mean[sel] <- data$VALUE[sel]/2
+      data$VALUE_for_mean[sel] <- data$VALUE[sel]/2
     }
   } else {
     LOQ <- NA
@@ -103,14 +104,14 @@ draw_pooled_means_single <- function(..., under_loq_treatement = "random between
     summarise(
       N_in_pool = n(),
       N_over_LOQ = sum(is.na(FLAG1)),
-      Conc = mean(Conc_for_mean), 
+      VALUE = mean(VALUE_for_mean), 
       .groups = "drop"
     )
-  # Set FLAG1 values, and adjust Conc up to LOQ if the value is below it
+  # Set FLAG1 values, and adjust VALUE up to LOQ if the value is below it
   result$FLAG1 <- NA
   if (sum(sel) > 0){
-    sel2 <- result$Conc < LOQ
-    result$Conc[sel2] <- LOQ
+    sel2 <- result$VALUE < LOQ
+    result$VALUE[sel2] <- LOQ
     result$FLAG1[sel2] <- "<"
   }
   result
@@ -234,19 +235,20 @@ get_detrended_one_series <- function(params, species, station, tissue, data){
            STATION_NAME %in% station, 
            TISSUE_NAME %in% tissue,
            # Year %in% year,
-           !is.na(Conc)
+           !is.na(VALUE)
     ) %>% 
-    select(LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, SAMPLE_ID, NAME, Conc, FLAG1)
-  mod <- lm(Conc ~ Year, result)
-  # data_orig$Conc_orig <- data_orig$Conc
-  # data_orig$Conc <- data_orig$Conc_orig - predict(mod) + mean(data_orig$Conc_orig)
+    select(LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, SAMPLE_ID, NAME, VALUE, FLAG1)
+    #  select(LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, SAMPLE_ID, NAME, Conc, FLAG1)
+  mod <- lm(VALUE ~ Year, result)
+  # data_orig$VALUE_orig <- data_orig$VALUE
+  # data_orig$VALUE <- data_orig$VALUE_orig - predict(mod) + mean(data_orig$VALUE_orig)
   # data_orig
-  mean_conc <- result %>% pull(Conc) %>% mean()
-  fitted_conc <- predict(mod)
+  mean_VALUE <- result %>% pull(VALUE) %>% mean()
+  fitted_VALUE <- predict(mod)
   result %>%
     mutate(
-      Conc_orig = Conc,
-      Conc = Conc_orig - fitted_conc + mean_conc
+      VALUE_orig = VALUE,
+      VALUE = VALUE_orig - fitted_VALUE + mean_VALUE
     )
 }
 
@@ -263,7 +265,7 @@ if (FALSE){
 
 get_detrended <- function(data){
   data_orig <- data %>% 
-    filter(!is.na(Conc))
+    filter(!is.na(VALUE))
   df_series <- data_orig %>%
     distinct(NAME, LATIN_NAME, STATION_NAME, TISSUE_NAME)  
   n <- nrow(df_series)
@@ -286,8 +288,7 @@ if (FALSE){
       NAME %in% c("BDE99", "PFOS"),
       LATIN_NAME %in% "Brown trout", 
       STATION_NAME %in% "Mjøsa", 
-      TISSUE_NAME %in% "Muscle") %>%
-    rename(Conc = VALUE) 
+      TISSUE_NAME %in% "Muscle")
   test <- get_detrended(data = test_data)  
   # test
   table(test$NAME)
@@ -370,11 +371,18 @@ if (FALSE){
 }
 
 
-sim_get_means <- function(n_years, change, mean){
+sim_get_means_OLD <- function(n_years, change, mean){
   x <- 1:n_years
   y_1 <- change*(x-x[1])
   y <- y_1 - mean(y_1) + mean
   data.frame(x, y)
+}
+
+sim_get_means <- function(years, change, mean){
+  x <- years - min(years) + 1 
+  y_1 <- change*(x-x[1])
+  y <- y_1 - mean(y_1) + mean
+  data.frame(Year = years, VALUE = y)
 }
 
 if (FALSE){
@@ -481,5 +489,32 @@ if (FALSE){
 
 
 
+#
+# Get list of data frames with concentration of given parameters  
+#
 
+# as 'draw_concentrations' but with Conc
 
+draw_concentrations2 <- function(params, ..., data = dat){
+  samples <- draw_samples(..., data = dat)  
+  names(samples) <- seq_along(samples)
+  data <- ungroup(data)
+  map_dfr(samples, 
+          \(x) data %>% 
+            filter(SAMPLE_ID %in% x & NAME %in% params) %>% 
+            select(LATIN_NAME, STATION_NAME, TISSUE_NAME, Year, NAME, Conc, FLAG1),
+          .id = "Pooled_sample")
+}
+
+if (FALSE){
+  # TEST
+  unique(dat$NAME)
+  dat %>% count(NAME, Year) %>% View()
+  # debugonce(draw_concentrations)
+  # draw_concentrations(c("PFOSA", "PFOS"), 
+  #                     "Salmo trutta", "Mjøsa", "Muskel", 2018, 4, data = dat)  
+  
+  draw_concentrations2(c("PFUnDA"), "Brown trout", "Mjøsa", "Muscle", 2018, 3, data = dat_sel)  
+  
+  
+}
