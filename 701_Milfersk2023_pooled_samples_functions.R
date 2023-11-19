@@ -382,7 +382,7 @@ sim_get_means <- function(years, change, mean){
   x <- years - min(years) + 1 
   y_1 <- change*(x-x[1])
   y <- y_1 - mean(y_1) + mean
-  data.frame(Year = years, VALUE = y)
+  data.frame(Year = years, logVALUE = y)
 }
 
 if (FALSE){
@@ -518,3 +518,92 @@ if (FALSE){
   
   
 }
+
+get_manipulated_data_oneseries <- function(data, given_change){
+  
+  # Annual expected value, as observed
+  mod <- lm(logVALUE ~ Year, data)
+  df_yr <- data %>% distinct(Year)
+  df_means_orig <- data.frame(
+    Year = df_yr$Year, 
+    logVALUE = predict(mod, df_yr))
+  
+  # Annual expected value, mean
+  mean <- mean(data$logVALUE)
+  df_means_new <- sim_get_means(df_yr$Year, change = given_change, mean = mean)
+  
+  data_manip <- data %>%
+    left_join(df_means_orig %>% rename(mean_orig = logVALUE),
+              by = join_by(Year)) %>%
+    left_join(df_means_new %>% rename(mean_new = logVALUE),
+              by = join_by(Year)) %>%
+    mutate(
+      logVALUE_orig = logVALUE,
+      logVALUE = logVALUE_orig - mean_orig + mean_new,
+      VALUE = exp(logVALUE)
+    )
+  
+  data_manip
+  
+}
+
+if (FALSE){
+  
+  dat_test <- data.frame(Year = rep(c(2001,2002,2005), each = 3),
+                         logVALUE = rep(c(20,15,5), each = 3) + rnorm(9),
+                         SAMPLE_ID = 1:9)
+  
+  dat_test2 <- dat_test %>% get_manipulated_data_oneseries(given_change = 5)
+  
+  cowplot::plot_grid(
+    ggplot(dat_test, 
+           aes(Year, logVALUE)) + 
+      geom_point(),
+    ggplot(dat_test2, 
+           aes(Year, logVALUE)) + 
+      geom_point()
+  )
+
+}
+
+
+get_manipulated_lm_oneseries_onechange <- function(data, given_change,
+                                         no_samples, no_draws){
+  
+  yrs <- data %>% pull(Year) %>% unique()  
+  
+  data_pooled <- draw_pooled_means(name_order, "Brown trout", "Mjøsa", "Muscle", yrs, 
+                                       no_samples = no_samples, no_draws = no_draws, 
+                                       data = get_manipulated_data_oneseries(
+                                         data, 
+                                         given_change = 0)) %>%
+    mutate(logVALUE = log(VALUE))
+  
+  ### Test 4 - Rrgression of pooled data  
+  # ?reframe
+  data_pooled %>%
+    nest_by(NAME, Draw) %>%
+    mutate(model = list(lm(logVALUE ~ Year, data = data))) %>%
+    summarise(tidy(model), .groups = "drop")%>%
+    filter(term == "Year")
+  
+}
+
+if (FALSE){
+  
+  dat_test <- data.frame(Year = rep(c(2001,2002,2005), each = 3),
+                         logVALUE = rep(c(20,15,5), each = 3) + rnorm(9),
+                         FLAG1 = NA,
+                         SAMPLE_ID = 1:9,
+                         NAME = "x", LATIN_NAME = "Brown trout", 
+                         STATION_NAME = "Mjøsa", TISSUE_NAME = "Muscle")
+  
+  debugonce(get_manipulated_lm_oneseries_onechange)
+  debugonce(draw_pooled_means_single)
+  debugonce(draw_concentrations)
+  debugonce(draw_samples)
+  get_manipulated_lm_oneseries_onechange(dat_test, given_change = 5, no_samples = 3, no_draws = 5)
+  
+  
+}
+
