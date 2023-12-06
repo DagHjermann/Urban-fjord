@@ -1,0 +1,352 @@
+---
+title: "702_Milfersk2023_pooled_samples_theory"
+format: html
+---
+
+Theoretical exploration of the effects of sample and analytical variation
+
+
+## Packages  
+
+```{r}
+
+library(dplyr)
+library(purrr)     # map()
+library(tidyr)     # unnest()
+library(ggplot2)
+library(cowplot)   # plot
+library(broom)
+
+```
+
+
+## Functions for creating data    
+
+### Creating individual data    
+
+```{r}
+
+create_data_ind <- function(v_sample = 0.3, v_analyt = 0.2, a = 1, b = 0.035, n = 15, years = 2010:2022){
+  ntot <- n*length(years)
+  data.frame(
+    sample = rep(1:n, length(years)),
+    year = rep(years, each = n)) %>%
+    mutate(
+      v_sample = v_sample, 
+      v_analyt = v_analyt, 
+      a = a, 
+      b = b,
+      n = n,
+      strategy = "Individual",
+      conc_exp = a + b*(year-min(year)),
+      #conc_actual = conc_exp + rnorm(ntot, sd = v_sample),
+      conc_actual = exp(log(conc_exp) + rnorm(ntot, sd = v_sample)),
+      conc_obs = conc_actual + rnorm(ntot, sd = v_analyt)
+    )
+}
+
+# Test
+# debugonce(create_data_ind)
+rm(dat)
+dat <- create_data_ind()
+ylim <- range(dat$conc_actual, dat$conc_obs_ind)
+  
+plot_grid(
+  ggplot(dat, aes(year, conc_actual)) +
+    geom_smooth(method = lm, formula = 'y ~ x') +
+    scale_x_continuous(breaks = seq(2010, 2022, 2)) +
+    scale_y_continuous(limits = ylim) +
+    geom_point(),
+  ggplot(dat, aes(year, conc_obs)) +
+    geom_smooth(method = lm, formula = 'y ~ x') +
+    scale_x_continuous(breaks = seq(2010, 2022, 2)) +
+    scale_y_continuous(limits = ylim) +
+    geom_point()
+)
+
+```
+### Creating pooled data    
+
+```{r}
+
+#| fig-width: 6
+#| fig-height: 2
+
+
+prepare_data_pooled <- function(data, n_pooled = 3){
+  data %>%
+    mutate(
+      n_pooled = n_pooled,
+      n_per_pool = n/n_pooled,
+      sample_pooled = (sample - 1) %/% n_per_pool + 1
+      ) 
+}
+
+# Test
+dat1 <- create_data_ind()
+# debugonce(create_data_pooled)
+dat2 <- prepare_data_pooled(dat1, 3)
+# dat2
+
+create_data_pooled <- function(data){
+  data %>%
+    group_by(v_sample, v_analyt, a, b, n, n_pooled, year, sample_pooled) %>%
+    summarize(
+      conc_exp = mean(conc_exp),
+      conc_actual = mean(conc_actual),
+      conc_obs = mean(conc_obs), 
+      .groups = 'drop'
+    ) %>%
+    mutate(
+      strategy = "Pooled",
+    )
+}
+
+dat3 <- create_data_pooled(dat2)
+
+plot_grid(
+  ggplot(dat1, aes(year, conc_actual)) +
+    geom_smooth(method = lm, formula = 'y ~ x') +
+    scale_x_continuous(breaks = seq(2010, 2022, 2)) +
+    scale_y_continuous(limits = ylim) +
+    geom_point() +
+    labs(title = "Actual (individual)"),
+  ggplot(dat1, aes(year, conc_obs)) +
+    geom_smooth(method = lm, formula = 'y ~ x') +
+    scale_x_continuous(breaks = seq(2010, 2022, 2)) +
+    scale_y_continuous(limits = ylim) +
+    geom_point() +
+    labs(title = "Observed (individual)"),
+  ggplot(dat3, aes(year, conc_obs)) +
+    geom_smooth(method = lm, formula = 'y ~ x') +
+    scale_x_continuous(breaks = seq(2010, 2022, 2)) +
+    scale_y_continuous(limits = ylim) +
+    geom_point() +
+    labs(title = "Observed (pooled)"), 
+  nrow = 1 
+)
+
+```
+
+```{r}
+
+cat("********************************************************************\n")
+cat("Individual samples\n")
+cat("********************************************************************\n")
+mod <- lm(conc_obs ~ year, data = dat1)
+summary(mod)$coef
+anova(mod)
+cat("\n")
+
+cat("********************************************************************\n")
+cat("Pooled samples\n")
+cat("********************************************************************\n")
+mod <- lm(conc_obs ~ year, data = dat3)
+summary(mod)$coef
+anova(mod)
+
+```
+
+
+### Functions for getting combining results   
+
+```{r}
+
+create_data <- function(v_sample = 0.1, v_analyt = 0.2, a = 1, b = 0.1, n = 15, 
+                        n_pooled = 3, replicate = 1, years = 2010:2022){
+  dat_ind <- create_data_ind(
+    v_sample = v_sample, v_analyt = v_analyt, a = a, b = b, n = n, years = years)
+  dat_pooled <- prepare_data_pooled(dat_ind, n_pooled = n_pooled) %>% create_data_pooled()
+  bind_rows(
+    dat_ind, 
+    dat_pooled %>% rename(sample = sample_pooled)
+    ) %>%
+    mutate(
+      n_pooled = mean(n_pooled, na.rm = TRUE),  # in order to set n_pooled also for strategy = Individual
+      replicate = replicate
+    ) %>%
+    select(sample, year, v_sample, v_analyt, a, b, n, n_pooled, strategy, replicate, 
+           conc_exp, conc_actual, conc_obs)
+  
+}
+
+# For coding 'select' statement in function
+# create_data() %>% names() %>% paste(collapse = ", ")
+
+# Test
+# create_data() %>% View("test")
+
+dat <- create_data()  
+
+cat("********************************************************************\n")
+cat("Actual data\n")
+cat("********************************************************************\n")
+mod1 <- lm(conc_exp ~ year, data = dat %>% filter(strategy == "Individual"))
+mod2 <- lm(conc_actual ~ year, 
+           data = dat %>% 
+             filter(strategy == "Individual")
+)
+mod3 <- lm(conc_actual_exp ~ year, 
+           data = dat %>% 
+             filter(strategy == "Individual") %>%
+             mutate(conc_actual_exp = conc_actual - conc_exp)
+)
+anova(mod1)
+anova(mod2)
+anova(mod3)
+cat("\n")
+
+cat("********************************************************************\n")
+cat("Individual samples\n")
+cat("********************************************************************\n")
+mod <- lm(conc_obs ~ year, data = dat %>% filter(strategy == "Individual"))
+summary(mod)$coef
+anova(mod)
+cat("\n")
+
+cat("********************************************************************\n")
+cat("Pooled samples\n")
+cat("********************************************************************\n")
+mod <- lm(conc_obs ~ year, data = dat %>% filter(strategy == "Pooled"))
+summary(mod)$coef
+anova(mod)
+
+```
+
+
+## Perform simulations
+
+### Create data  
+
+```{r}
+
+var_tot <- 0.3  
+n_repl <- 5
+
+df_sim <- data.frame(
+  var_anal_perc = rep(seq(0,100,1), each = n_repl),
+  replicate = rep(1:n_repl, 101)
+) %>%
+  mutate(
+    v_analyt = var_tot*var_anal_perc/100,
+    v_sample = var_tot*(100-var_anal_perc)/100
+  )
+
+# i <- 5
+# test <- create_data(v_sample = df_sim$v_sample[i], 
+#                     v_analyt = df_sim$v_analyt[i], 
+#                     replicate = df_sim$replicate[i])
+
+rm(df_sim_fulldata)
+
+set.seed(100)
+df_sim_fulldata <- 1:nrow(df_sim) %>%
+  map_dfr(
+    \(i) create_data(v_sample = df_sim$v_sample[i], 
+                     v_analyt = df_sim$v_analyt[i],
+                     replicate = df_sim$replicate[i])
+  )
+
+```
+
+### Variance  
+
+#### Test 1  
+```{r}
+
+i <- 100
+df1 %>% 
+  filter(year == 2015, replicate == 5) %>%
+  ggplot(aes(x = sample)) +
+  geom_point(aes(y = conc_obs), color = "red") +
+  geom_point(aes(y = conc_actual)) 
+
+var(df1$conc_obs)
+var(df1$conc_actual)
+
+```
+
+#### Test 2  
+```{r}
+
+# test 2  
+df1 <- df_sim_fulldata %>%
+  filter(v_sample == df_sim$v_sample[i], v_analyt == df_sim$v_analyt[i],
+         strategy == "Individual") 
+
+df1_var <- df1 %>%
+  group_by(year, replicate) %>%
+  summarize(
+    var_obs = var(conc_obs),
+    var_actual = var(conc_actual),
+    var_actual_perc = var_actual/var_obs*100)
+
+ggplot(df1_var, aes(year, var_obs)) +
+  geom_point()
+ggplot(df1_var, aes(year, var_actual)) +
+  geom_point()
+ggplot(df1_var, aes(year, var_actual/var_obs)) +
+  geom_point()
+
+```
+
+#### Test 2 - show example where var_actual > var_obs  
+```{r}
+
+df1 %>% 
+  filter(year == 2010, replicate == 5) %>%
+  ggplot(aes(x = sample)) +
+  geom_point(aes(y = conc_obs), color = "red") +
+  geom_point(aes(y = conc_actual)) 
+
+df1 %>% 
+  filter(year == 2010, replicate == 5) %>%
+  ggplot(aes(x = conc_actual)) +
+  geom_point(aes(y = conc_obs)) +
+  geom_abline(intercept = 0, slope = 1) +
+  coord_fixed()
+
+```
+
+#### Test 3  
+```{r}
+
+# test 2  
+df1 <- df_sim_fulldata %>%
+  filter(strategy == "Individual") 
+
+df1_var <- df1 %>%
+  group_by(year, replicate, v_analyt) %>%
+  summarize(
+    var_obs = var(conc_obs),
+    var_actual = var(conc_actual),
+    var_actual_perc = var_actual/var_obs*100)
+
+ggplot(df1_var, aes(v_analyt, var_obs)) +
+  geom_point()
+ggplot(df1_var, aes(v_analyt, var_actual)) +
+  geom_point()
+ggplot(df1_var, aes(v_analyt, var_actual_perc)) +
+  geom_point() 
+
+```
+
+### Perform regression  
+
+```{r}
+
+df_result <- df_sim_fulldata %>%
+  nest(data = c(-v_analyt, -strategy)) %>%
+  mutate(
+    fit = map(data, ~ lm(conc_obs ~ year, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  filter(term == "year")
+
+ggplot(df_result, aes(v_analyt, std.error, color = strategy)) +
+  geom_smooth() +
+  geom_point()
+
+```
+
