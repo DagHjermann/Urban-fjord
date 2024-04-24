@@ -1,11 +1,10 @@
 ---
-title: "250_Nivabase_Urban_2022_addmeas"
+title: "250_Nivabase_Urban_2019_addmeas"
 format: html
 ---
 
 - Add NILU and IFE measurements based on script 0110 (folder 'Old scripts')
-
-
+- In this case: 
 
 
 ## 1. Setup  
@@ -38,16 +37,9 @@ old_options <- options(useFancyQuotes = FALSE)
 
 ```{r}
 
-dir("Input_data/2022")
+dir("Input_data/2019")
 
-dat_biota_nilu <- read_excel("Input_data/2022/Importmal_extern_biota_nilu_2022.xlsx")
-dat_biota_ife <- read_excel("Input_data/2022/Importmal_extern_biota_ife_2022.xlsx")
-
-dat_biota <- bind_rows(
-  dat_biota_nilu,
-  dat_biota_ife
-)
-
+dat_biota <- read_excel("Input_data/2019/export_NILU_2019.xlsx", guess_max = 10000)
 
 ```
 

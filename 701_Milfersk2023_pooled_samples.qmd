@@ -12,10 +12,14 @@ library(purrr)
 library(lubridate)
 library(readxl)
 library(ggplot2)
+library(ggeasy)
+library(ggdist)
 library(tidyr)
 library(forcats)     # fct_rev()
 library(broom)       # for tidy()
+library(cowplot)     # for plot_grid()
 library(NADA2)       # for regression with data under LOQ 
+library(glue)        # glue()
 # help(package = "NADA2")
 
 source("701_Milfersk2023_pooled_samples_functions.R")
@@ -26,17 +30,55 @@ source("701_Milfersk2023_pooled_samples_functions.R")
 
 
 ## Data  
-
 ### Concentrations  
 
 ```{r}
 
 dat_orig1 <- read.csv("Milfersk/Data_combined/001 MF Mjøsa  stack.txt")
 
+```
+
+### PFAS from Asle  
+
+```{r}
+
+dat_pfas_orig <- read.csv("Milfersk/Data_combined/PFAS_2014_2022 tidstrend - LOQ satt til 0 - Copy.csv") %>%
+  rename(Length = `Length..cm`,
+         Weight = `Weight..g`,
+         d13C = `δ13C...`,
+         d15N = `δ15N...`)
+dat_pfas_orig$No <- 1:nrow(dat_pfas_orig)
+
+paste(names(dat_pfas_orig), collapse = ", ")
+
+dat_pfas <- dat_pfas_orig %>%
+  select(-Sum.PFAS) %>%
+  pivot_longer(
+    cols = c(PFNA, PFDA, PFUDA, PFDoA, PFTrDA, PFTeDA, PFPeDA, PFOS, PFOSA), 
+    names_to = "NAME", values_to = "VALUE_txt"
+  ) %>%
+  mutate(
+    VALUE = as.numeric(sub(",", ".", VALUE_txt))
+  )
+
+
+```
+
+
+
+### Substance names, example  
+```{r}
 # xtabs(~Label, dat_orig1)
 xtabs(~Label, dat_orig1 %>% filter(grepl("138", Label)))
 
+xtabs(~addNA(Source.Table) + Label, dat_orig1 %>% filter(grepl("PFOS", Label)))
+
 ```
+```{r}
+
+
+```
+
 
 ### Add substance names (Identifier) and area, species, tissue, year
 
@@ -56,6 +98,24 @@ if (nrow(dat_orig2) > nrow(dat_orig1))
 
 ```
 
+
+#### Trout and perch individuals per year   
+
+- Doesn't appear correct for 2022 - seems to lack trout completely  
+- We fix this below, by supplying 2022 data from a separate file 
+
+```{r}
+# table(addNA(dat_orig2$Area))
+
+dat_orig2 %>%
+  filter(
+    Species.2 %in% c("Brown trout", "Abbor -muskel", "Perch")) %>%
+  mutate(Year_LIMS = as.numeric(stringr::str_extract(LIMS.NR, "20[1-2][0-9]"))) %>%
+  distinct(MYEAR, Year_LIMS, Species.2, Tissue, LIMS.NR) %>%
+  count(MYEAR, Year_LIMS, Species.2, Tissue)
+
+```
+
 #### Length and weight    
 
 ```{r}
@@ -66,6 +126,7 @@ xtabs(~MYEAR + is.na(Length..cm.), lookup_sample)
 xtabs(~MYEAR + is.na(Weight..g.), lookup_sample)
 
 ```
+
 
 
 ### Bunch of tables  
@@ -108,12 +169,10 @@ xtabs(~addNA(Data.availability) + addNA(MYEAR),
 ### Add year + species + flag 
 ```{r}
 
-dat <- dat_orig2 %>%
+dat_orig3 <- dat_orig2 %>%
   mutate(
     Year = as.numeric(stringr::str_extract(LIMS.NR, "20[1-2][0-9]")),
-    LATIN_NAME = case_when(
-      Species.2 %in% c("Brown trout", "Abbor -muskel") ~ "Brown trout",
-      TRUE ~ Species.2),
+    LATIN_NAME = Species.2,
     FLAG1 = case_when(
       Data.availability %in% 0 ~ "<",
       Data.availability %in% 1 ~ as.character(NA))
@@ -127,13 +186,204 @@ dat <- dat_orig2 %>%
     ) %>%
   select(-Species.2)
 
-xtabs(~addNA(MYEAR) + addNA(Year), dat)
-xtabs(~addNA(LATIN_NAME) + addNA(Year), dat)
-xtabs(~addNA(TISSUE_NAME) + addNA(Year), dat %>% filter(LATIN_NAME %in% "Brown trout"))
+xtabs(~addNA(MYEAR) + addNA(Year), dat_orig3)
+xtabs(~addNA(LATIN_NAME) + addNA(Year), dat_orig3)
+xtabs(~addNA(TISSUE_NAME) + addNA(Year), dat_orig3 %>% filter(LATIN_NAME %in% "Brown trout"))
 
 
 ```
 
+### Check PFOS  
+
+```{r}
+
+dat_plot <- dat_orig3 %>%
+  filter(NAME %in% "PFOS")
+
+ggplot(dat_plot, aes(Year, VALUE, color = addNA(FLAG1))) +
+  geom_point()  
+
+ggplot(dat_plot, aes(x = factor(Year), y = VALUE)) +
+  geom_boxplot()  
+
+```
+
+### Check BDE-99  
+
+```{r}
+
+params <- "BDE99"
+params <- "BDE17"
+
+dat_plot <- dat_orig3 %>%
+  filter(NAME %in% params & Year != 2021)
+
+ggplot(dat_plot, aes(Year, VALUE, color = addNA(FLAG1))) +
+  geom_point()  
+
+ggplot(dat_plot, aes(x = factor(Year), y = VALUE)) +
+  geom_boxplot()  
+
+```
+
+
+
+### Supplying 2022 data for Mjøsa trout data, except PFAS    
+
+```{r}
+
+dat_2022_orig <- readxl::read_excel("Milfersk/Data_combined/MILFERSK2022_all data.xlsx", 
+                                    sheet = "MGR", col_types = "text")
+# names(dat_2022_orig)
+table(dat_2022_orig$`Compound spec.`)  
+
+xtabs(~`Compound spec.`, dat_2022_orig)
+xtabs(~`Compound spec.`, dat_2022_orig %>% filter(!is.na(PFOS)))        # Ørret-lever
+xtabs(~`Compound spec.`, dat_2022_orig %>% filter(!is.na(`BDE-100`)))   # Ørret, Mjøsa, muskel
+xtabs(~`Compound spec.`, dat_2022_orig %>% filter(!is.na(`D5 (ng/g)`))) # Ørret, Mjøsa, muskel
+
+dat_2022_trout_mjosa <- dat_2022_orig %>%
+  filter(`Compound spec.` %in% "Ørret, Mjøsa, muskel") %>%
+  select(-forkortelse, -`Compound spec.`, -Unit) %>%
+  pivot_longer(-`LIMS-NR`, names_to = "NAME", values_to = "value_txt") %>%
+  filter(!is.na(value_txt)) %>%
+  mutate(
+    FLAG1 = case_when(
+      grepl("^<", value_txt) ~ "<",
+      TRUE ~ as.character(NA)),
+    VALUE = as.numeric(sub("<", "", value_txt)),
+    VALUE = case_when(
+      NAME %in% "Hg" ~ VALUE*1000,
+      TRUE ~ VALUE),
+    Year = 2022,
+    LATIN_NAME = "Brown trout",
+    TISSUE_NAME = "Muscle",
+    STATION_NAME = "Mjøsa"
+  ) %>%
+  rename(
+    SAMPLE_ID = `LIMS-NR`)
+
+```
+
+### Combined data for trout in Mjøsa  
+
+- NB! all other 2022 data than trout muscle from Mjøsa are ignored  
+```{r}
+
+dat_orig4a <- bind_rows(
+  dat_orig3 %>% filter(Year <= 2020),  # trout data for 2021 are pooled anyway
+  dat_2022_trout_mjosa)
+
+```
+
+### Replace PFAS data with data from Asle   
+
+#### Make data for replacement 
+
+```{r}
+
+# To make code below
+# dat_orig1$Label[28863 + 0:17] %>% dput()
+
+
+# Need: SAMPLE_ID, NAME, FLAG1, VALUE, Year, LATIN_NAME, TISSUE_NAME, STATION_NAME
+dat_pfas_to_add <- dat_pfas %>%
+  rename(
+    LATIN_NAME = Species,
+    STATION_NAME = Lake
+  ) %>%
+  mutate(
+    FLAG1 = case_when(
+      VALUE == 0 ~ "<",
+      TRUE ~ as.character(NA)),
+    TISSUE_NAME = "Muscle",
+    SAMPLE_ID = as.character(No)
+  ) %>%
+  select(SAMPLE_ID, NAME, FLAG1, VALUE, Year, LATIN_NAME, TISSUE_NAME, STATION_NAME)
+
+```
+
+#### Perform replacement    
+
+```{r}
+
+params_pfas <- c("PFBS", "PFPS", "PFHxS", "PFHpS", "8Cl-PFOS", "PFNS", "PFDS", 
+                 "PFDoS", "PFOSA", "PFBS", "PFPS", "PFHxS", "PFHpS", "8Cl-PFOS", 
+                 "PFNS", "PFDS", "PFDoS", "PFOSA")
+
+dat_orig4b <- dat_orig4a %>%
+  filter(!NAME %in% params_pfas) %>%
+  bind_rows(dat_pfas_to_add %>% filter(Year != 2021))   # 2021 has pooled samples   
+
+```
+
+
+### Check and fix parameter names  
+
+```{r}
+
+# check
+check <- dat_orig4b %>%
+  group_by(NAME) %>%
+  summarize(min_year = min(Year)) %>%
+  filter(min_year == 2022)
+# check
+# dput(check$NAME)
+
+sel <- 
+
+# Fix BDEs
+sel <- substr(dat_orig4b$NAME, 1, 4) == "BDE-"  
+unique(dat_orig4b$NAME[sel])
+dat_orig4b$NAME[sel] <- sub("BDE-", "BDE", dat_orig4b$NAME[sel])
+# rerun 'check' above
+
+# Fix siloxanes
+sel <- dat_orig4b$NAME %in% c("D4 (ng/g)", "D5 (ng/g)", "D6 (ng/g)", "L3 (ng/g)", "L4 (ng/g)", "L5 (ng/g)")  
+unique(dat_orig4b$NAME[sel])
+dat_orig4b$NAME[sel] <- sub(" (ng/g)", "", dat_orig4b$NAME[sel], fixed = TRUE)
+# rerun 'check' above
+
+# Fix CCPs
+sel <- dat_orig4b$NAME %in% c("MCCP ng/g", "SCCP ng/g")  
+unique(dat_orig4b$NAME[sel])
+dat_orig4b$NAME[sel] <- sub(" ng/g", "", dat_orig4b$NAME[sel], fixed = TRUE)
+# rerun 'check' above
+
+dat <- dat_orig4b
+
+```
+
+### Set VALUE and FLAG1 for 2022 data  
+
+
+```{r}
+
+# xtabs(~ Year + (VALUE < 0), dat_orig4 %>% filter(NAME %in% "BDE17"))
+# xtabs(~ Year + (VALUE < 0), dat_orig4 %>% filter(NAME %in% "BDE202"))
+# xtabs(~ Year + (VALUE < 0), dat_orig4 %>% filter(NAME %in% "BDE209"))
+
+dat_orig4 <- dat_orig4b %>%
+  filter(!is.na(VALUE))
+
+sel <- dat_orig4$VALUE < 0
+dat_orig4$VALUE[sel] <- -dat_orig4$VALUE[sel] 
+dat_orig4$FLAG1[sel] <- "<"
+
+```
+
+### Check  
+
+```{r}
+
+dat_orig4 %>%
+  filter(NAME %in% c("Hg", "PFOS", "D5")) %>%
+  ggplot(aes(Year, VALUE)) +
+  geom_point() +
+  scale_y_log10() +
+  facet_wrap(vars(NAME))
+
+```
 
 
 ## Get Coefficient of variation       
@@ -142,7 +392,9 @@ xtabs(~addNA(TISSUE_NAME) + addNA(Year), dat %>% filter(LATIN_NAME %in% "Brown t
 
 #### Usable trout time series   
 
-
+* Criteria:   
+    * At least 20 measurements >LOQ  
+    * At least 6 years with some measurements >LOQ   
 
 ```{r}
 
@@ -181,23 +433,55 @@ df_series_sel1 <- df_series_all %>%
 #### Test plots  
 ```{r}
 
-ggplot(dat %>% semi_join(df_series_sel1[1:15,]), 
+for (series_no in list(1:15, 16:26)){
+  
+gg <- ggplot(dat %>% semi_join(df_series_sel1[series_no,], 
+                               by = join_by(NAME, STATION_NAME, TISSUE_NAME, LATIN_NAME)), 
        aes(Year, VALUE, color = is.na(FLAG1))) +
   geom_point() +
-  facet_wrap(vars(NAME), scales = "free_y")
+  facet_wrap(vars(NAME), scales = "free_y") +
+  easy_rotate_x_labels(angle = -45)
+  
+print(gg)
 
-ggplot(dat %>% semi_join(df_series_sel1[16:26,]), 
-       aes(Year, VALUE, color = is.na(FLAG1))) +
-  geom_point() +
-  facet_wrap(vars(NAME), scales = "free_y")
+}
+
 
 ```
+
+#### Closer look at specific compounds     
+
+```{r}
+
+param <- "PFUnDA"
+param <- "BDE100"
+
+# dat %>% filter(NAME %in% param & LATIN_NAME == "Brown trout") %>% View(param)
+  
+gg <- dat %>% filter(NAME %in% param & LATIN_NAME == "Brown trout") %>% # View("PF")
+  ggplot(aes(Year, VALUE, shape = is.na(FLAG1), color = TISSUE_NAME)) +
+  geom_jitter(width = 0.3) +
+  scale_shape_manual(values = c(1,19))
+
+gg
+gg + scale_y_log10()
+
+#  & TISSUE_NAME == "Muscle"
+```
+
+
 #### Remove non-monotonic  
 
 ```{r}
 
 df_series_sel <- df_series_sel1 %>%
   filter(!NAME %in% c("D6", "TBA"))
+
+```
+
+### Define dat_sel
+
+```{r}
 
 # Order
 # unique(df_series_sel$NAME) %>% dput()
@@ -255,19 +539,91 @@ ggplot(df_cv %>% filter(CVt < 100),
 
 
 ```
+### Add estimates of measurement error
+
+```{r}
+
+df_cv$Uncert_perc_offer <- NA  
+df_cv$Uncert_perc <- NA  
+
+# df_cv$NAME_chr <- as.character(df_cv$NAME)
+
+# dput(df_cv$NAME)
+
+sel <- df_cv$NAME %in% "Hg"  
+df_cv$Uncert_perc_offer[sel] <- 15  
+df_cv$Uncert_perc[sel] <- 12  
+
+sel <- df_cv$NAME %in% c("BDE99")  
+df_cv$Uncert_perc_offer[sel] <- 35  
+df_cv$Uncert_perc[sel] <- 25  
+
+sel <- df_cv$NAME %in% c("BDE47", "BDE49", "BDE100", "BDE153", "BDE154")  
+df_cv$Uncert_perc_offer[sel] <- 40  
+df_cv$Uncert_perc[sel] <- 30  
+
+sel <- df_cv$NAME %in% c("BDE28", "BDE66", "BDE77", "BDE119", "BDE126", "BDE183", "BDE184")  
+df_cv$Uncert_perc_offer[sel] <- 45  
+df_cv$Uncert_perc[sel] <- 35  
+
+sel <- df_cv$NAME %in% c("BDE17", "BDE202", "BDE209")  
+df_cv$Uncert_perc_offer[sel] <- 50
+df_cv$Uncert_perc[sel] <- 40  
+
+sel <- df_cv$NAME %in% c("D4", "D5")  
+df_cv$Uncert_perc_offer[sel] <- 20
+df_cv$Uncert_perc[sel] <- 15  
+
+sel <- df_cv$NAME %in% c("PFDoDA", "PFOS", "PFTeDA", "PFTrDA", "PFUnDA")  
+df_cv$Uncert_perc_offer[sel] <- 25
+df_cv$Uncert_perc[sel] <- 20  
+
+df_cv$CVa <- df_cv$Uncert_perc/2
+
+# Bignert et al:
+# CVt = sqrt(CVa^2 + CVs^2)  
+# CVt^2 = CVa^2 + CVs^2  
+# CVs^2 = CVt^2 - CVa^2  
+# CVs = sqrt(CVt^2 - CVa^2)  
+
+df_cv$CVs <- 100*sqrt((df_cv$CVt/100)^2 - (df_cv$CVa/100)^2) 
+
+```
+
+### Table for publication 
+```{r}
+
+df_cv_r <- df_cv %>%
+  select(NAME, sd, mean, CVt, CVa, CVs) %>%
+  as.data.frame()
+
+for (i in 2:3)
+  df_cv_r[,i] <- signif(df_cv_r[,i], 2)
+for (i in 4:6)
+  df_cv_r[,i] <- round(df_cv_r[,i], 0)
+
+old_options <- options(scipen=999)
+knitr::kable(df_cv_r)
+
+options(old_options)
+
+```
 
 ## Regression on original trends  
 
 * Deleting all <LOQ data  
 
-### all years, unpooled data     
+### all years, unpooled data 
+
+* Using log(concentration) as VALUE         
 
 ```{r}
 
 mod <- dat_sel %>%
   filter(is.na(FLAG1)) %>%  
+  mutate(logVALUE = log(VALUE)) %>%
   split(.$NAME) %>%
-  map(\(data) lm(VALUE ~ Year, data = data))
+  map(\(data) lm(logVALUE ~ Year, data = data))
 
 mod_coef <- mod %>%
   map_dfr(\(model) as.data.frame(summary(model)$coefficients)[2,],
@@ -303,17 +659,25 @@ ggplot(mod_coef,
 
 ```
 
-### until 2019, unpooled data        
+### 2015 - 2022, unpooled data        
 
+* Using log(concentration) as logVALUE  
 
 ```{r}
+
+dat_sel <- dat_sel %>%
+  filter(!is.na(NAME))
+
+# sel <- dat_sel$NAME %in% "Hg"
+# sum(sel)
+# dat_sel$VALUE[sel] <- dat_sel$VALUE[sel]*1000
 
 # 1st try, without {broom}
 
 # mod <- dat_sel %>%
 #   filter(is.na(FLAG1) & Year <= 2019) %>%  
 #   split(.$NAME) %>%
-#   map(\(data) lm(VALUE ~ Year, data = data))
+#   map(\(data) lm(logVALUE ~ Year, data = data))
 # 
 # mod_coef_unpooled <- mod %>%
 #   map_dfr(\(model) as.data.frame(summary(model)$coefficients)[2,],
@@ -322,12 +686,13 @@ ggplot(mod_coef,
 
 # with {broom}
 mod_coef_unpooled_mod <- dat_sel %>%
-  filter(is.na(FLAG1) & Year <= 2019) %>%  
+  filter(is.na(FLAG1) & Year %in% 2015:2022) %>%  
+  mutate(logVALUE = log(VALUE)) %>%
   nest_by(NAME) %>%
-  mutate(model = list(lm(VALUE ~ Year, data = data)))
+  mutate(model = list(lm(logVALUE ~ Year, data = data)))
 
 mod_coef_unpooled <- mod_coef_unpooled_mod %>%
-  summarise(tidy(model), .groups = "drop")%>%
+  reframe(tidy(model), .groups = "drop")%>%
   filter(term == "Year")
 
 # Estimates + Std error, all
@@ -361,13 +726,61 @@ ggplot(mod_coef_unpooled,
 
 ```
 
+```{r}
+# with {broom}
+mod_coef_unpooled_mod <- dat_sel %>%
+  filter(is.na(FLAG1) & Year %in% 2015:2022) %>%  
+  droplevels() %>%
+  mutate(logVALUE = log(VALUE)) %>%
+  nest_by(NAME) %>%
+  mutate(model = list(lm(logVALUE ~ Year, data = data)))
 
-### until 2019, pooled data        
+mod_coef_unpooled <- mod_coef_unpooled_mod %>%
+  reframe(tidy(model), .groups = "drop")%>%
+  filter(term == "Year")
+
+# t values
+ggplot(mod_coef_unpooled, 
+       aes(fct_rev(NAME), statistic)) +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = c(-2,2), linetype = "dashed") +
+  coord_flip() 
+
+```
+
+#### Example  
+
+#### Test plot  
+```{r}
+
+params <- c("BDE17", "BDE202", "BDE209", "PFOS")
+# params <- c("BDE17")
+
+dat_sel2 <- dat_sel %>% 
+  filter(NAME == params & is.na(FLAG1) & Year %in% 2015:2022) %>% # View()
+  mutate(logVALUE = log(VALUE))
+
+for (param in params){
+  cat("\n", param, "\n")
+  lm(logVALUE ~ Year, data = dat_sel2 %>% filter(NAME %in% param)) %>% 
+    summary() %>% .$coef %>% print()
+}
+
+ggplot(dat_sel2, aes(Year, logVALUE)) +
+  geom_smooth(method = "lm") +
+  geom_jitter(width = 0.2) +
+  facet_wrap(vars(NAME), scales = "free_y")
+
+
+```
+
+### 2015 - 2022, pooled data        
 
 
 #### Test for one year    
 
-* Including undere LOQ data
+* Including under LOQ data
 
 ```{r}
 
@@ -401,175 +814,425 @@ test4 <- test3 %>%
 ```{r}
 
 unpooled_yrs <- dat_sel %>%
-  filter(Year <= 2019 & is.na(FLAG1)) %>%
+  filter(Year %in% 2015:2022 & is.na(FLAG1)) %>%
   pull(Year) %>%
   unique()
 
 dat_pooled <- draw_pooled_means(name_order, "Brown trout", "Mjøsa", "Muscle", unpooled_yrs, 
-                  no_samples = 3, no_draws = 10, 
-                  data = dat_sel %>% filter(is.na(FLAG1)))  
+                  no_samples = 3, no_draws = 100, 
+                  data = dat_sel %>% filter(Year %in% 2015:2022 & is.na(FLAG1)))  
 
 ```
 
 #### Test plot  
 ```{r}
+  
+dat_sel %>%
+  filter(NAME == "BDE99" & Year %in% 2015:2022 & is.na(FLAG1)) %>%  
+  mutate(logVALUE = log(VALUE)) %>%
+  ggplot(aes(Year, logVALUE)) +
+  geom_smooth(method = lm, se = FALSE) +
+  geom_jitter(width = 0.1) +
+  labs(y = "log(Concentration) of BDE-99") +
+  theme_bw()
 
-ggplot(dat_sel %>% filter(NAME == "BDE126" & Year <= 2019), 
-       aes(Year, VALUE, color = is.na(FLAG1))) +
-  geom_point()
-
-ggplot(dat_pooled %>% filter(NAME == "BDE126"), 
-       aes(Year, VALUE, color = is.na(FLAG1))) +
-  geom_point() +
-  facet_wrap(vars(Draw))
+dat_pooled %>% 
+  filter(NAME == "BDE99" & as.numeric(Draw) <= 4) %>% 
+  mutate(logVALUE = log(VALUE)) %>%
+  ggplot(aes(Year, logVALUE)) +
+  geom_smooth(method = lm, se = FALSE) +
+  geom_jitter(width = 0.1) +
+  facet_wrap(vars(Draw)) +
+  labs(y = "log(Concentration) of BDE-99") +
+  theme_bw()
 
 ```
 
 #### Perform regression  
 
+* Using log(concentration) as logVALUE  
+
 ```{r}
 
 mod_coef_bydraw <- dat_pooled %>%
+  mutate(logVALUE = log(VALUE)) %>%   # Using log(concentration) as logVALUE
   nest_by(NAME, Draw) %>%
-  mutate(model = list(lm(VALUE ~ Year, data = data))) %>%
-  summarise(tidy(model), .groups = "drop")%>%
-  filter(term == "Year")
+  mutate(model = list(lm(logVALUE ~ Year, data = data))) %>%
+  reframe(tidy(model), .groups = "drop")%>%
+  filter(term == "Year") %>%
+  mutate(change_perc_peryear = 100*(exp(estimate)- 1)) # change in % per year
+
+mod_coef_unpooled <- mod_coef_unpooled %>%
+  mutate(change_perc_peryear = 100*(exp(estimate)- 1)) # change in % per year
   
+
+```
+
+### 2015 - 2022, estimates of annual change per year  
+
+#### percent change, plot (for report)  
+```{r}
+
+gg <- ggplot(mod_coef_bydraw, 
+       aes(fct_rev(NAME), change_perc_peryear)) +
+  geom_dots(side = "both", color = "blue2") +
+  geom_point(data = mod_coef_unpooled, color = "red") +
+  geom_hline(yintercept = 0) +
+  coord_flip() +
+  labs(
+    y = "Estimated annual change in concentration (%)",
+    x = "Substance") +
+  theme_bw() 
+
+ggsave("Figures/701_origtrend_annualchange.png", gg, width = 7, height = 7, dpi = 150)
+
+gg
+
+```
+
+#### t values, plot (for report)  
+
+```{r}
+
+mod_coef_unpooled <- mod_coef_unpooled %>%
+  mutate(p.significance = ifelse(p.value<=0.05, "P < 0.05", "P > 0.05"))
+
+gg <- ggplot(mod_coef_bydraw %>% 
+               mutate(p.significance = ifelse(p.value<=0.05, "P < 0.05", "P > 0.05")), 
+       aes(fct_rev(NAME), statistic)) +
+  geom_dots(aes(color = p.significance, fill = p.significance), side = "both") +
+  geom_point(data = mod_coef_unpooled, aes(fill = p.significance), shape = 23, size = rel(3)) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_brewer(palette = "Dark2") +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = c(-2,2), linetype = "dashed") +
+  scale_y_continuous(breaks = seq(-4,4,2)) +
+  coord_flip() +
+  # theme(axis.title.x = element_text(hjust = 2)) +
+  labs(
+    y = "t value of time trend",
+    x = "Substance"
+  ) +
+  theme_bw()
+
+
+ggsave("Figures/701_origtrend_tvalue.png", gg, width = 7, height = 7, dpi = 150)
+
+gg
+
+```
+
+
+#### Change in percent per year  
+
+```{r}
+
+# install.packages("ggdist")
+library(ggdist)
+
+# Estimates, non-BDE  
+ggplot(mod_coef_bydraw %>% filter(!grepl("BDE", NAME)), 
+       aes(fct_rev(NAME), estimate)) +
+  geom_dots(side = "both") +
+  geom_point(data = mod_coef_unpooled %>% filter(!grepl("BDE", NAME)), color = "red") +
+  geom_hline(yintercept = 0) +
+  coord_flip() +
+  labs(
+    y = "Estimated percent change",
+    x = "Substance") +
+  theme_bw()
+ 
+
 # Estimates, BDE  
 ggplot(mod_coef_bydraw %>% filter(grepl("BDE", NAME)), 
        aes(fct_rev(NAME), estimate)) +
-  geom_point() +
+  geom_dots(side = "both") +
   geom_point(data = mod_coef_unpooled %>% filter(grepl("BDE", NAME)), color = "red") +
   geom_hline(yintercept = 0) +
-  coord_flip() 
-
-# t values
-ggplot(mod_coef_bydraw, 
-       aes(fct_rev(NAME), statistic)) +
-  geom_point() +
-  geom_point(data = mod_coef_unpooled, color = "red") +
-  geom_hline(yintercept = 0) +
-  geom_hline(yintercept = c(-2,2), linetype = "dashed") +
-  coord_flip() 
+  coord_flip() +
+  labs(
+    y = "Estimated percent change",
+    x = "Substance") +
+  theme_bw()
+ 
 
 
 ```
-
-
-```{r}
-
-
-
-```
-
-```{r}
-
-
-  
-test <- map(all_yrs,
-            \(year) get_combined_data(c("PFUnDA"), 
-                    "Brown trout", "Mjøsa", "Muscle", year = year, 
-                    no_samples = 4, no_draws = 2, 
-                    data = dat_sel %>% filter(Year <= 2019))) %>%
-  list_rbind()
-
-# test
-ggplot(test, aes(Year, VALUE, color = Sampling)) +
-  geom_point(aes(shape = `LOQ status`)) +
-  scale_shape_manual(values = c("Over LOQ" = 16, "Under LOQ" = 6)) +
-  facet_grid(vars(NAME), vars(Sampling), scales = "free_y")
-
-
-```
-
-
-
-
-
 
 ## Regression on manipulated trends   
 
+### Define changes to test 
+
+```{r}
+# annual change of 5%
+# x1 <- 10
+# x2 = x1*1.05
+# log(x2) = log(x1) + log(1.05)
+# log(1.05) = 0.048
+# log(0.95) = -0.051
+
+# Percent change per year: -35% (change_perc = 0.65) to +35% (change_perc = 1.35) 
+change_perc <- c(
+  seq(0.65, 0.95, 0.05),
+  seq(0.975, 1.025, 0.025),
+  seq(1.05, 1.35, 0.05))
+df_change <- data.frame(
+  change_perc = change_perc,
+  change_log = log(change_perc)
+)
+
+```
+
+### Define dat_sel2  
+
 ```{r}
 
-dat_test <- dat_sel %>% 
-  filter(NAME == "BDE126" & is.na(FLAG1) & Year <= 2019)
+dat_sel2 <- dat_sel %>%
+  filter(Year %in% 2015:2022 & !is.na(VALUE))
 
-# mod_test <- mod_coef_unpooled_mod %>%
-#   filter(NAME == "BDE126")
-# predict(mod_test$model)
+```
 
-# Annual expected value, as observed
-mod <- lm(VALUE ~ Year, dat_test)
-df_yr <- dat_test %>% distinct(Year)
-df_means_orig <- data.frame(
-  Year = df_yr$Year, 
-  VALUE = predict(mod, df_yr))
+### One parameter  
 
-# Annual expected value, mean
-mean <- mean(dat_test$VALUE)
-df_means_new <- sim_get_means(2014:2019, change = 0, mean = mean)
+```{r}
 
-ggplot(dat_test, aes(Year, VALUE)) +
-  geom_point() +
-  geom_point(data = df_means_orig, color = "blue") +
-  geom_point(data = df_means_new, color = "red")
+param <- "PFOS"
+# param <- "D4"
 
-dat_test_manip <- dat_test %>%
-  left_join(df_means_orig %>% rename(mean_orig = VALUE),
-            by = join_by(Year)) %>%
-  left_join(df_means_new %>% rename(mean_new = VALUE),
-            by = join_by(Year)) %>%
-  mutate(
-    VALUE_orig = VALUE,
-    VALUE = VALUE_orig - mean_orig + mean_new,
-  )
+dat_test <- dat_sel2 %>% 
+  filter(NAME == param & is.na(FLAG1)) %>%
+  mutate(logVALUE = log(VALUE)) %>%
+  select(NAME, Year, VALUE, logVALUE, FLAG1, LATIN_NAME, STATION_NAME, TISSUE_NAME, SAMPLE_ID)
 
-# Test regression 
-mod_test <- lm(VALUE ~ Year, data = dat_test_manip)
-summary(mod_test)$coef
+```
 
-cowplot::plot_grid(
-  ggplot(dat_test_manip, aes(Year, VALUE_orig)) +
-    geom_point(),
-  ggplot(dat_test_manip, aes(Year, VALUE)) +
-    geom_point(), nrow = 1)
+#### Check manipulation   
+
+```{r}
+
+# dat_test
+
+plot_grid(
+  ggplot(dat_test, aes(Year, VALUE)) + 
+    geom_point() + labs(title = glue("dat_test, conc. ({param})")),
+  ggplot(dat_test, aes(Year, logVALUE)) + 
+    geom_smooth(method = "lm") + geom_point() + labs(title = glue("dat_test, log(conc.) ({param})"))
+)
   
+orig_mod <- lm(logVALUE ~ Year, dat_test)
+orig_est <- coef(orig_mod)["Year"]
+orig_change_perc_peryear <- 100*(exp(orig_est)- 1) # change in % per year
+c(orig_est, orig_change_perc_peryear)
+
+# debugonce(get_manipulated_data_oneseries)
+
+# Manipulated, using same change as observed
+dat_test_manipulated0 <- dat_test %>% get_manipulated_data_oneseries(given_change = orig_est)  
+
+plot_grid(
+  ggplot(dat_test, aes(Year, logVALUE)) + 
+    geom_smooth(method = "lm") + geom_point() + labs(title = glue("dat_test, original ({param})")),
+  ggplot(dat_test_manipulated0, aes(Year, logVALUE)) + 
+    geom_smooth(method = "lm") + geom_point() + labs(title = glue("dat_test, manipulated ({param})"))
+)
+
+```
+#### Manipulated time series  
+
+```{r, fig.height=2, fig.width=7}
+
+# Manipulated, using various changes
+dat_test_manipulated1 <- dat_test %>% get_manipulated_data_oneseries(given_change = log(0.8))  
+dat_test_manipulated2 <- dat_test %>% get_manipulated_data_oneseries(given_change = 0)  
+dat_test_manipulated3 <- dat_test %>% get_manipulated_data_oneseries(given_change = log(1.2))  
+
+
+gg <- plot_grid(
+  ggplot(dat_test, aes(Year, logVALUE)) + 
+    geom_smooth(method = "lm") + geom_point() + labs(title = "Original") +
+    theme_bw(),
+  ggplot(dat_test_manipulated1, aes(Year, logVALUE)) + 
+    geom_smooth(method = "lm") + geom_point() + labs(title = "Manipulated, -20%/year") +
+    theme_bw(),
+  ggplot(dat_test_manipulated2, aes(Year, logVALUE)) + 
+    geom_smooth(method = "lm") + geom_point() + labs(title = "Manipulated, no trend") +
+    theme_bw(),
+  ggplot(dat_test_manipulated3, aes(Year, logVALUE)) + 
+    geom_smooth(method = "lm") + geom_point() + labs(title = "Manipulated, +20%/year") +
+    theme_bw(),
+  nrow = 1,
+  label_size = 5
+)
+
+ggsave(glue("Figures/701_Manipulated_time_series_{param}.png"), gg, width = 12, height = 3, dpi = 150)
+
 ```
 
+#### Get slope estimates   
 
-
-## Simulate time series         
-
-* For power calculations   
-* For a given substance, matrix (?), length of time series, and annual change in mean (% change per year)     
-    - Get mean for each year  
-    - Draw a random year's data for each year (with replacement)  
-    - Adjust that data to the mean for each year  
-    - Feed those data into 'get_combined_data' so we also get the data for the pooled case  
-    - Run linear regression, collect regression statistics  
-* Repeat for several percentage annyual change, length of time series, etc.   
-
-
-### Nada regression on the original data  
 ```{r}
 
-test <- dat %>% 
-  filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE126") %>%
-  mutate(log_conc = log(VALUE))
-ggplot(test, aes(Year, VALUE, color = is.na(FLAG1))) +
+# lm_orig_onevar_raw
+
+lm_orig_onevar_raw <- get_manipulated_lm_oneseries(
+  dat_test, change_values = df_change$change_log, no_samples = NA) %>%
+  left_join(df_change, by = join_by(change_log))
+
+# lm_pooled_onevar_raw
+
+lm_pooled_onevar_raw <- get_manipulated_lm_oneseries(
+  dat_test, change_values = df_change$change_log, no_samples = 3, no_draws = 5) %>%
+  left_join(df_change, by = join_by(change_log))
+
+data_for_test_plot <- bind_rows(
+  lm_orig_onevar_raw %>% mutate(Data = "Individual data"),
+  lm_pooled_onevar_raw %>% mutate(Data = "Pooled data")
+)
+
+ggplot(data_for_test_plot, aes(change_perc, estimate)) +
+  geom_pointrange(aes(ymin = estimate - 2*std.error, ymax = estimate + 2*std.error),
+                  position = position_dodge2(width = 0.3)) +
+  labs(
+    title = glue("Slope estimates ({param})"),
+    x = "Change (no change = 1)") +
+  facet_wrap(vars(Data))
+
+
+lm_result_onevar <- bind_rows(
+  lm_orig_onevar_raw %>%
+    group_by(NAME, change_perc) %>%
+    summarise(power = 100*mean(p.value < 0.05), .groups = "drop") %>%
+    mutate(samples = "Individual"),
+  lm_pooled_onevar_raw %>%
+    group_by(NAME, change_perc) %>%
+    summarise(power = 100*mean(p.value < 0.05), .groups = "drop") %>%
+    mutate(samples = "Pooled (5)")
+)
+
+
+```
+
+### One parameter, combine results     
+
+```{r}
+
+lm_result_onevar <- dat_sel2 %>% 
+  filter(NAME == "BDE100" & is.na(FLAG1)) %>%
+  mutate(logVALUE = log(VALUE)) %>%
+  get_manipulated_lm_oneseries2(df_changevalues = df_change, 
+                                no_samples = 3, 
+                                no_draws = 5)
+
+ggplot(lm_result_onevar, aes(change_perc, power, color = samples)) +
+  geom_line() +
   geom_point()
-sim_get_regression_results(test, method = "NADA")
 
 ```
+
+### Several parameters, test       
 
 ```{r}
 
-data_sim1 <- sim_get_rawdata(test, yvar = "VALUE", n_years = 10, change = 0.1, mean = 5, extravars = "FLAG1")
-sim_get_regression_results(test, method = "NADA")
+lm_result <- get_manipulated_lm(
+  data = dat_sel2 %>% filter(NAME %in% c("BDE100", "BDE99")), 
+  df_changevalues = df_change, no_samples = 3, no_draws = 5)
+
+ggplot(lm_result, aes(change_perc, power, color = samples)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(vars(NAME))
 
 ```
 
-## APPENDIX: Testing  
+### All parameters     
+
+```{r}
+
+# dir.create("Data/701_lmresult")
+
+# This takes ca 20 minutes  
+# if (TRUE){
+if (FALSE){
+  
+  lm_result <- list()
+  
+  for (name in name_order){
+    
+    data_for_analysis <- dat_sel2 %>% 
+      filter(NAME == name & is.na(FLAG1) & Year %in% 2015:2022) %>%
+      mutate(logVALUE = log(VALUE))
+    
+    lm_result_onevar <- try(
+      get_manipulated_lm_oneseries2(
+        data = data_for_analysis,
+        df_changevalues = df_change, 
+        no_samples = 3, 
+        no_draws = 50))  
+    
+    saveRDS(lm_result_onevar, paste0("Data/701_lmresult/result_", name, ".rds"))
+    
+    lm_result[[name]] <- lm_result_onevar
+    
+  }
+  
+  # lm_result[["D4"]]  # error  
+  # lm_result <- lm_result[!names(lm_result) %in% "D4"]
+  
+  saveRDS(lm_result, "Data/701_lmresult/lm_result.rds")
+  
+}
+
+# lm_result_files <- dir("Data/701_lmresult")
+
+lm_result_list_all <- readRDS("Data/701_lmresult/lm_result.rds")
+length(lm_result_list_all)
+
+ok <- map_lgl(lm_result_list_all, is.data.frame)
+lm_result_list <- lm_result_list_all[ok]
+
+lm_result <- bind_rows(lm_result_list) %>%
+  mutate(perc_change_per_year = 100*(change_perc - 1))
+
+```
+
+#### plots (for report)    
+
+```{r}
+
+gg <- ggplot(lm_result %>% filter(!grepl("BDE", NAME)), 
+       aes(perc_change_per_year, power, color = samples)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(vars(NAME)) +
+  labs(
+    x = "Percent change per year",
+    y = "Power (%)"
+  ) +
+  theme_bw()
+
+ggsave("Figures/701_maniptrend_subst1.png", gg, width = 8, height = 5, dpi = 150)
+gg
+
+gg <- ggplot(lm_result %>% filter(grepl("BDE", NAME)), 
+       aes(perc_change_per_year, power, color = samples)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(vars(NAME)) +
+  labs(
+    x = "Percent change per year",
+    y = "Power (%)"
+  ) +
+  theme_bw()
+
+ggsave("Figures/701_maniptrend_subst2.png", gg, width = 8, height = 5 , dpi = 150)
+gg
+
+```
+
+
+
+
+## APPENDIX 1: Testing  
 
 ### Make data from random draws  
 
@@ -613,8 +1276,147 @@ ggplot(test, aes(Year, Conc, color = Sampling)) +
 
 ```
 
+## APPENDIX 2: Regression on manipulated trends - testing     
+
+### Test 1: a - get means     
+
+* this test is the basis for 'get_manipulated_data'    
 
 ```{r}
 
+given_change <- -0.16
+
+dat_test <- dat_sel %>% 
+  filter(NAME == "BDE126" & is.na(FLAG1) & Year <= 2019) %>%
+  mutate(logVALUE = log(VALUE))
+
+# Annual expected value, as observed
+mod <- lm(logVALUE ~ Year, dat_test)
+df_yr <- dat_test %>% distinct(Year)
+df_means_orig <- data.frame(
+  Year = df_yr$Year, 
+  logVALUE = predict(mod, df_yr))
+
+# Annual expected value, mean
+mean <- mean(dat_test$logVALUE)
+df_means_new <- sim_get_means(2014:2019, change = given_change, mean = mean)
+
+ggplot(dat_test, aes(Year, logVALUE)) +
+  geom_jitter(width = 0.2)  +
+  geom_point(data = df_means_orig, color = "blue", size = rel(2)) +
+  geom_point(data = df_means_new, color = "red", size = rel(2))
+
+```
+### Test 1: b - manipulate data  
+
+```{r}
+
+dat_test_manip <- dat_test %>%
+  left_join(df_means_orig %>% rename(mean_orig = logVALUE),
+            by = join_by(Year)) %>%
+  left_join(df_means_new %>% rename(mean_new = logVALUE),
+            by = join_by(Year)) %>%
+  mutate(
+    logVALUE_orig = logVALUE,
+    logVALUE = logVALUE_orig - mean_orig + mean_new,
+  )
+
+# Test regression 
+mod_test <- lm(logVALUE ~ Year, data = dat_test_manip)
+summary(mod_test)$coef
+
+cowplot::plot_grid(
+  ggplot(dat_test_manip, aes(Year, logVALUE_orig)) +
+    geom_point(),
+  ggplot(dat_test_manip, aes(Year, logVALUE)) +
+    geom_point(), nrow = 1)
+  
 ```
 
+
+### Test 2 - Get pooled data   
+
+```{r} 
+
+nrow(dat_test)
+xtabs(~Year, dat_test)
+
+dat_test_pooled <- draw_pooled_means(name_order, "Brown trout", "Mjøsa", "Muscle", unpooled_yrs, 
+                  no_samples = 3, no_draws = 2, 
+                  data = get_manipulated_data_oneseries(dat_test, given_change = given_change)) %>%
+  mutate(logVALUE = log(VALUE))
+
+xtabs(~Draw + Year, dat_test_pooled)  
+
+```
+
+
+#### test plot  
+```{r}
+
+cowplot::plot_grid(
+  ggplot(dat_test, aes(Year, logVALUE)) +
+    geom_point(),
+  ggplot(dat_test_pooled, aes(Year, logVALUE)) +
+    geom_point() +
+    facet_wrap(vars(Draw)),
+  nrow = 2
+)
+
+```
+
+### Test 3 - Regression of pooled data  
+
+```{r}
+
+# ?reframe
+mod_coef_bydraw <- dat_test_pooled %>%
+  nest_by(NAME, Draw) %>%
+  mutate(model = list(lm(logVALUE ~ Year, data = data))) %>%
+  reframe(tidy(model), .groups = "drop")%>%
+  filter(term == "Year")
+
+mod_coef_bydraw
+
+```
+
+### Test 2 + 3  
+
+```{r}
+
+get_manipulated_lm_oneseries_onechange(dat_test, given_change = 5, no_samples = 3, no_draws = 5)
+
+```
+
+
+
+## APPENDIX 3: Simulate time series         
+
+* For power calculations   
+* For a given substance, matrix (?), length of time series, and annual change in mean (% change per year)     
+    - Get mean for each year  
+    - Draw a random year's data for each year (with replacement)  
+    - Adjust that data to the mean for each year  
+    - Feed those data into 'get_combined_data' so we also get the data for the pooled case  
+    - Run linear regression, collect regression statistics  
+* Repeat for several percentage annyual change, length of time series, etc.   
+
+
+### Nada regression on the original data  
+```{r}
+
+test <- dat %>% 
+  filter(LATIN_NAME %in% "Brown trout" & TISSUE_NAME %in% "Muscle" & NAME %in% "BDE126") %>%
+  mutate(log_conc = log(VALUE))
+ggplot(test, aes(Year, VALUE, color = is.na(FLAG1))) +
+  geom_point()
+sim_get_regression_results(test, method = "NADA")
+
+```
+
+```{r}
+
+data_sim1 <- sim_get_rawdata(test, yvar = "VALUE", n_years = 10, change = 0.1, mean = 5, extravars = "FLAG1")
+sim_get_regression_results(test, method = "NADA")
+
+```

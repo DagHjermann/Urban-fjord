@@ -126,6 +126,15 @@ dat_nb_sediment <- dat_nb_sediment %>%
 
 ## 3. Couple Labware TEXT_ID per Nivabase SAMPLE_ID
 
+### Get labware sample table  
+
+```{r}
+
+dat_labsamples <- readRDS("Data/100_dat_lab_Milfersk_2022_2024-01-16.rds")
+
+```
+
+
 ### Get Labware sample ID     
 
 ```{r}
@@ -134,7 +143,7 @@ dat_nb_sediment <- dat_nb_sediment %>%
 # get_nivabase_data("select * from NIVADATABASE.LABWARE_WSID where rownum < 6")  
 # get_nivabase_data("select * from NIVADATABASE.LABWARE_SLICE_ID where rownum < 6")  
 
-unique(dat_nb_biota$SAMPLE_ID)
+# unique(dat_nb_biota$SAMPLE_ID)
 
 dat_lab_biota <- get_nivabase_selection(
   c("BIOTA_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
@@ -145,14 +154,13 @@ dat_lab_biota <- get_nivabase_selection(
 #   c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
 #   "LABWARE_WSID", 
 #   "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID)) 
+
 dat_lab_sediment <- get_nivabase_selection(
   c("SLICE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
   "LABWARE_SLICE_ID", 
   "SLICE_ID", unique(dat_nb_sediment$SLICE_ID)) 
 
 ```
-
-
 
 ### Add labware TEXT_ID to the data?  
 
@@ -167,7 +175,10 @@ dat_lab_sediment <- get_nivabase_selection(
 ```{r}
 
 # Expect this to have zero rows:
-check <- dat_lab_biota %>% add_count(BIOTA_SAMPLE_ID) %>% filter(n > 1)
+check <- dat_lab_biota %>% 
+  add_count(BIOTA_SAMPLE_ID) %>% 
+  filter(n > 1) %>%
+  left_join(dat_labsamples %>% select(TEXT_ID, DESCRIPTION, TISSUE), by = c("LABWARE_TEXT_ID" = "TEXT_ID"))
 
 if (nrow(check) == 0){
   message("No duplicates of any SAMPLE_ID")
@@ -176,6 +187,81 @@ if (nrow(check) == 0){
 }
 
 ```
+#### Number of observations in 
+
+```{r}
+
+sample_id_nb <- check$BIOTA_SAMPLE_ID[1]
+sample_id_labware <- check %>% filter(BIOTA_SAMPLE_ID == sample_id_nb) %>% pull(LABWARE_TEXT_ID)
+
+dat_nb_biota %>%
+  filter(SAMPLE_ID == sample_id) %>%
+  count(NAME, UNIT)
+
+check_labware_values <- get_nivabase_selection(
+  "TEXT_ID, REPORTED_NAME, ENTRY_QUALIFIER, NUMERIC_ENTRY, UNITS", 
+  "LABWARE_IMPORT", 
+  "TEXT_ID", 
+  check$LABWARE_TEXT_ID, values_are_text = TRUE) 
+
+# Inspect check2
+# In most cases, of the two TEXT_ID per SAMPLE_ID, one has 
+#   56 substances, the other has 5 substances 
+check2 <- check %>%
+  left_join(
+    check_labware_values %>% distinct(TEXT_ID, REPORTED_NAME) %>% count(TEXT_ID, name = "n_substances"), 
+    by = c("LABWARE_TEXT_ID" = "TEXT_ID") 
+  )
+
+```
+
+#### Check case of 56 + 5 substances 
+
+* The 5 substances are isotope values  
+
+```{r}
+
+check2_example <- check2 %>%
+  filter(BIOTA_SAMPLE_ID == 248670)
+
+text_id_example <- check2_example %>%
+  pull(LABWARE_TEXT_ID)
+
+check_labware_values %>%
+  filter(TEXT_ID %in% text_id_example) %>%
+  group_by(TEXT_ID) %>%
+  slice(1:5)
+
+
+```
+#### Check case of 50 + 50 substances 
+
+* All are PFAS variables, but there are two measurements of each substance  
+* Only one (the first one) has been imported to Nivabase  
+
+```{r}
+
+check2_example <- check2 %>%
+  filter(BIOTA_SAMPLE_ID == 250593)
+
+text_id_example <- check2_example %>%
+  pull(LABWARE_TEXT_ID)
+
+# Check these data:    
+check_labware_values_example <- check_labware_values %>%
+  arrange(REPORTED_NAME, TEXT_ID) %>%
+  filter(TEXT_ID %in% text_id_example)
+# View(check_labware_values_example)
+
+check_labware_values_example  %>%
+  filter(REPORTED_NAME == "PFOS")
+
+dat_nb_biota %>%
+  filter(SAMPLE_ID %in% check2_example$BIOTA_SAMPLE_ID & NAME == "PFOS")
+
+```
+
+
 
 #### Number of parameters per sample    
 
@@ -225,6 +311,10 @@ if (FALSE){
   files <- dir("Data", "200_dat_nb_sediment_", full.names = TRUE) %>% sort(decreasing = TRUE)
   dat_nb_sediment <- readRDS(files[1])
   table(dat_nb_sediment$SLICE_ID)
+  
+    files <- dir("Data", "200_dat_nb_biota_", full.names = TRUE) %>% sort(decreasing = TRUE)
+  dat_nb <- readRDS(files[1])
+
 }
 
 ```

@@ -124,7 +124,7 @@ if (FALSE){
   dat %>%
     filter(TISSUE_NAME == "Muskel") %>%
     group_by(NAME) %>%
-    summarise(P_under_LOQ = mean(FLAG1 %in% "<"))
+    summarise(P_under_LOQ = mean(FLAG1 %in% "<"), .groups = "drop")
   
   # draw_pooled_means_single(c("PFOSA", "PFOS"), 
   #                          "Salmo trutta", "Femunden", "Muskel", 2018, 4, data = dat)  
@@ -553,7 +553,7 @@ if (FALSE){
                          logVALUE = rep(c(20,15,5), each = 3) + rnorm(9),
                          SAMPLE_ID = 1:9)
   
-  dat_test2 <- dat_test %>% get_manipulated_data_oneseries(given_change = 5)
+  dat_test2 <- dat_test %>% get_manipulated_data_oneseries(given_change = 0)
   
   cowplot::plot_grid(
     ggplot(dat_test, 
@@ -570,22 +570,39 @@ if (FALSE){
 get_manipulated_lm_oneseries_onechange <- function(data, given_change,
                                          no_samples, no_draws){
   
-  yrs <- data %>% pull(Year) %>% unique()  
-  
-  data_pooled <- draw_pooled_means(name_order, "Brown trout", "Mjøsa", "Muscle", yrs, 
-                                       no_samples = no_samples, no_draws = no_draws, 
-                                       data = get_manipulated_data_oneseries(
-                                         data, 
-                                         given_change = 0)) %>%
-    mutate(logVALUE = log(VALUE))
+  if (is.na(no_samples)){
+    
+    data_pooled <- data %>%
+      get_manipulated_data_oneseries(given_change = given_change) %>%
+      mutate(
+        Draw = "1",
+        Pooled_sample = "1",
+        N_in_pool = nrow(data),
+        N_over_LOQ = sum(is.na(FLAG1))
+      )
+        
+  } else {
+    yrs <- data %>% pull(Year) %>% unique()  
+    params <- data %>% pull(NAME) %>% unique()   
+    
+    # "Brown trout", "Mjøsa", "Muscle" are hard-coded  
+    data_pooled <- draw_pooled_means(params, "Brown trout", "Mjøsa", "Muscle", yrs, 
+                                     no_samples = no_samples, no_draws = no_draws, 
+                                     data = get_manipulated_data_oneseries(
+                                       data, 
+                                       given_change = given_change)) %>%
+      mutate(logVALUE = log(VALUE))
+    
+  } 
   
   ### Test 4 - Rrgression of pooled data  
   # ?reframe
   data_pooled %>%
     nest_by(NAME, Draw) %>%
     mutate(model = list(lm(logVALUE ~ Year, data = data))) %>%
-    summarise(tidy(model), .groups = "drop")%>%
-    filter(term == "Year")
+    reframe(tidy(model))%>%
+    filter(term == "Year") %>%
+    mutate(change_log = given_change)
   
 }
 
@@ -598,12 +615,127 @@ if (FALSE){
                          NAME = "x", LATIN_NAME = "Brown trout", 
                          STATION_NAME = "Mjøsa", TISSUE_NAME = "Muscle")
   
-  debugonce(get_manipulated_lm_oneseries_onechange)
-  debugonce(draw_pooled_means_single)
-  debugonce(draw_concentrations)
-  debugonce(draw_samples)
+  # debugonce(get_manipulated_lm_oneseries_onechange)
+  # debugonce(draw_pooled_means_single)
+  # debugonce(draw_concentrations)
+  # debugonce(draw_samples)
   get_manipulated_lm_oneseries_onechange(dat_test, given_change = 5, no_samples = 3, no_draws = 5)
+  get_manipulated_lm_oneseries_onechange(dat_test, given_change = 5, no_samples = NA)
   
   
 }
+
+
+get_manipulated_lm_oneseries <- function(data, change_values,
+                                         no_samples = 3, no_draws = 5){
+  result <- change_values %>%
+    map_dfr(
+      \(change) 
+      get_manipulated_lm_oneseries_onechange(data, given_change = change, 
+                                             no_samples = no_samples, no_draws = no_draws)
+    )
+  result
+}
+
+
+if (FALSE){
+
+  get_manipulated_lm_oneseries_onechange(dat_test, given_change = 5, no_samples = 3, no_draws = 2)
+  get_manipulated_lm_oneseries(dat_test, change_values = c(-5,5), no_samples = 3, no_draws = 2)
+  
+}
+
+
+get_manipulated_lm_oneseries2 <- function(data, df_changevalues,
+                                          no_samples = 3, no_draws = 5){
+  
+  lm_orig_onevar_raw <- get_manipulated_lm_oneseries(
+    data, 
+    change_values = df_changevalues$change_log, 
+    no_samples = NA) %>%
+    left_join(df_changevalues, by = join_by(change_log))
+  
+  lm_pooled_onevar_raw <- get_manipulated_lm_oneseries(
+    data, 
+    change_values = df_changevalues$change_log, 
+    no_samples = no_samples, 
+    no_draws = no_draws) %>%
+    left_join(df_changevalues, by = join_by(change_log))
+  
+  lm_result_onevar <- bind_rows(
+    lm_orig_onevar_raw %>%
+      group_by(NAME, change_perc) %>%
+      summarise(power = 100*mean(p.value < 0.05), .groups = "drop") %>%
+      mutate(samples = "Individual"),
+    lm_pooled_onevar_raw %>%
+      group_by(NAME, change_perc) %>%
+      summarise(power = 100*mean(p.value < 0.05), .groups = "drop") %>%
+      mutate(samples = "Pooled (5)")
+  )
+  
+  lm_result_onevar
+  
+}
+
+
+if (FALSE){
+  
+  change_perc <- c(1, 1.15)
+  df_change <- data.frame(
+    change_perc = change_perc,
+    change_log = log(change_perc)
+  )
+  get_manipulated_lm_oneseries2(dat_test, df_changevalues = df_change, no_samples = 3, no_draws = 2)
+  
+}
+
+
+get_manipulated_lm <- function(data, df_changevalues,
+                               no_samples = 3, no_draws = 5){
+  
+  names <- data %>% pull(NAME) %>% unique()
+  
+  result <- names %>%
+    map_dfr(
+      \(name){
+        data_for_analysis <- data %>% 
+          filter(NAME == name & is.na(FLAG1)) %>%
+          mutate(logVALUE = log(VALUE)) 
+        get_manipulated_lm_oneseries2(data_for_analysis, 
+                                      df_changevalues = df_changevalues, 
+                                      no_samples = no_samples, 
+                                      no_draws = no_draws)
+          
+      }
+    )
+  result
+}
+
+  
+
+if (FALSE){
+  
+  dat_test2 <- bind_rows(
+    data.frame(Year = rep(c(2001,2002,2005), each = 3),
+               logVALUE = rep(c(20,15,5), each = 3) + rnorm(9),
+               FLAG1 = NA,
+               SAMPLE_ID = 1:9,
+               NAME = "x", LATIN_NAME = "Brown trout", 
+               STATION_NAME = "Mjøsa", TISSUE_NAME = "Muscle"),
+    data.frame(Year = rep(c(2001,2002,2005), each = 3),
+               logVALUE = rep(c(10,9,6), each = 3) + rnorm(9),
+               FLAG1 = NA,
+               SAMPLE_ID = 1:9,
+               NAME = "y", LATIN_NAME = "Brown trout", 
+               STATION_NAME = "Mjøsa", TISSUE_NAME = "Muscle")
+  ) %>%
+    mutate(VALUE = exp(logVALUE)) 
+  
+  # debugonce(get_manipulated_lm)
+  get_manipulated_lm(dat_test2,  
+                     df_changevalues = df_change, 
+                     no_samples = 3, no_draws = 2)
+  
+}
+
 

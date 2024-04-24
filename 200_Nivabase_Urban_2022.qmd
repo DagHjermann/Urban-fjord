@@ -26,7 +26,7 @@ sampling_year <- 2022
 
 ```{r}
 
-dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2022_2023-06-22.rds")
+# dat_lab <- readRDS("Data/100_dat_lab_Milfersk_2022_2023-06-22.rds")
 
 ```
 
@@ -124,17 +124,78 @@ dat_nb_sediment <- dat_nb_sediment %>%
 
 ```
 
-### Check sample year 2021 for seal muscle and blubber  
+### Check biota data  
 
-- Seal sampled by UiO in 2021, samples analysed in 2022  
-- Lacking there as well
+#### Number of individuals per station  
+```{r}
+
+dat_nb_biota %>%
+  distinct(LATIN_NAME, STATION_CODE, SAMPLE_NO) %>%
+  count(LATIN_NAME, STATION_CODE)
+
+```
+
+#### Number of individuals per station  
+```{r}
+
+dat_nb_biota %>%
+  distinct(NAME, LATIN_NAME, SAMPLE_NO) %>%
+  count(NAME, LATIN_NAME, name = "number_ind") %>%
+  pivot_wider(names_from = LATIN_NAME, values_from = number_ind)
+
+```
+
+
+### Hunt for more (and other) biota data  
+
+#### Samples form LIMS  
+```{r}
+
+dir("Data", "100_lims_samples_")
+fn_lims <- "Data/100_lims_samples_Urban_2022_2023-10-13.rds"
+df_lims <- readRDS(fn_lims)
+
+```
+
+#### Use LABWARE_BSID to get SAMPLE_ID  
 
 ```{r}
 
-df_specimens_2021 <- get_specimens_from_stationdata(df_stations, years = 2021)
-message("No. of specimens, biota: ", nrow(df_specimens))
+lookup_sampleid_bio <- get_nivabase_selection(
+  columns = "LABWARE_TEXT_ID, BIOTA_SAMPLE_ID", 
+  table = "LABWARE_BSID", selection_column = "LABWARE_TEXT_ID", 
+  selection_values = df_lims$TEXT_ID, values_are_text = TRUE)
+
+nrow(lookup_sampleid_bio)
 
 ```
+
+#### Get data in Nivabase  
+
+```{r}
+
+df1 <- get_nivabase_selection(
+  "*",
+  "BIOTA_SAMPLES",
+  "SAMPLE_ID",
+  lookup_sampleid_bio$BIOTA_SAMPLE_ID
+)
+df2a <- get_nivabase_selection(
+  "*",
+  "BIOTA_SAMPLES_SPECIMENS",
+  "SAMPLE_ID",
+  lookup_sampleid_bio$BIOTA_SAMPLE_ID
+)
+df2b <- get_nivabase_selection(
+  "*",
+  "BIOTA_SINGLE_SPECIMENS",
+  "SPECIMEN_ID",
+  unique(df2a$SPECIMEN_ID)
+)
+get_biota_chemistry
+
+```
+
 
 
 ## 3. Couple Labware TEXT_ID per Nivabase SAMPLE_ID
@@ -167,6 +228,7 @@ dat_lab_sediment <- get_nivabase_selection(
 
 ```
 
+## STUFF NOT USED HERE   
 
 
 ### Add labware TEXT_ID to the data?  
