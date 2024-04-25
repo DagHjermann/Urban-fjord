@@ -17,8 +17,8 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2022"
-sampling_year <- 2022
+program_year <- "Milfersk_2023"
+sampling_year <- 2023
 
 ```
 
@@ -115,12 +115,15 @@ message("No. of samples, sediment: ", nrow(df_samples_sediment))
 
 dat_nb_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, years = sampling_year)
 
-dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sediment$METHOD_ID))
-
-dat_nb_sediment <- dat_nb_sediment %>%
-  left_join(dat_nb_sediment_methods, by = "METHOD_ID") %>%
-  mutate(Year = year(SAMPLE_DATE)) 
-
+if (nrow(dat_nb_sediment) > 0){
+  
+  dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sediment$METHOD_ID))
+  
+  dat_nb_sediment <- dat_nb_sediment %>%
+    left_join(dat_nb_sediment_methods, by = "METHOD_ID") %>%
+    mutate(Year = year(SAMPLE_DATE)) 
+  
+}
 
 ```
 
@@ -130,7 +133,9 @@ dat_nb_sediment <- dat_nb_sediment %>%
 
 ```{r}
 
-dat_labsamples <- readRDS("Data/100_dat_lab_Milfersk_2022_2024-01-16.rds")
+fns <- dir("Data", pattern = program_year) %>% rev()
+cat("Newest file: ", fns[[1]], "\n")
+dat_labsamples <- readRDS(paste0("Data/", fns[[1]]))
 
 ```
 
@@ -155,10 +160,14 @@ dat_lab_biota <- get_nivabase_selection(
 #   "LABWARE_WSID", 
 #   "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID)) 
 
-dat_lab_sediment <- get_nivabase_selection(
-  c("SLICE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_SLICE_ID", 
-  "SLICE_ID", unique(dat_nb_sediment$SLICE_ID)) 
+if (nrow(dat_nb_sediment) > 0){
+  
+  dat_lab_sediment <- get_nivabase_selection(
+    c("SLICE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
+    "LABWARE_SLICE_ID", 
+    "SLICE_ID", unique(dat_nb_sediment$SLICE_ID)) 
+  
+}
 
 ```
 
@@ -195,7 +204,7 @@ sample_id_nb <- check$BIOTA_SAMPLE_ID[1]
 sample_id_labware <- check %>% filter(BIOTA_SAMPLE_ID == sample_id_nb) %>% pull(LABWARE_TEXT_ID)
 
 dat_nb_biota %>%
-  filter(SAMPLE_ID == sample_id) %>%
+  filter(SAMPLE_ID == sample_id_nb) %>%
   count(NAME, UNIT)
 
 check_labware_values <- get_nivabase_selection(
