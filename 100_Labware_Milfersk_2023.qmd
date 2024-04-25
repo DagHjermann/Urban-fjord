@@ -28,7 +28,8 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Milfersk_2022"
+program_year <- "Milfersk_2023"
+year <- 2023
 
 ```
 
@@ -111,7 +112,10 @@ df_lab_all %>%
 
 ```
 
-### Samples lacking sample date 
+### Samples lacking sample date   
+
+- these are blank samples (blankprøver) as indicated by the DESCRIPTION field  
+- i.e. they are not samples from the environment and should indeed have no sample date (and preferably no station?)    
 
 ```{r}
 
@@ -132,7 +136,7 @@ df_lab_all_withoutdate %>%
 ```{r}
 
 df_lab <- df_lab_all %>% 
-  filter(year(SAMPLED_DATE) == 2022)
+  filter(year(SAMPLED_DATE) == year)
 
 ```
 
@@ -151,7 +155,7 @@ df_lab %>%
 
 #### Biota: stations and species   
 
-* NOTE: Station lacking for 79 samples ! 
+* Station lacking for no samples  
 
 ```{r}
 
@@ -183,11 +187,6 @@ df_lab %>%
 
 #### Check description for water samples   
 
-* 3 samples (probably surface water)  
-* HAs PFAS values, see Appendix 1  
-* However, according the budget (link below), there should be no water samples in 2022  
-    - https://niva365.sharepoint.com/:x:/r/sites/projects1/3604/Shared%20Documents/2022/01%20Project%20management/Budget/Copy%20of%20MILFERSK%20n%C3%A6ringsnett%20budsjett%202021-25_KSL.xlsx?d=w7f6c5391a33c4b96b357b1744fd28a99&csf=1&web=1&e=OIqLJ1
-
 ```{r}
 
 df_lab %>%
@@ -209,7 +208,9 @@ df_lab %>%
 
 
 
-#### Station "Benthic food chain"       
+#### Station "Benthic food chain"     
+
+* None in 2023
 
 ```{r}
 
@@ -224,7 +225,7 @@ df_lab %>%
 * When taken:    
     * H1_V, H1_P = sample 1, water and particle fraction  
     * H2_V, H2_P = sample 2, water and particle fraction  
-* None in 2022    
+* None in 2023    
 
 ```{r}
 
@@ -241,6 +242,7 @@ df_lab %>%
     * HIAS_S = Actual sediment  
     * HIAS1_V, HIAS1_P = sample 1, water and particle fraction
     * HIAS2_V, HIAS2_P = sample 2, water and particle fraction  
+* None in 2023  
 
 ```{r}
 
