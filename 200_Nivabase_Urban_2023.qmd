@@ -17,8 +17,9 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Urban_2022"
-sampling_year <- 2022
+program_year <- "Urban_2023"
+sampling_year <- 2023
+project_id <- 8551      # see below
 
 ```
 
@@ -42,6 +43,7 @@ library(readxl)
 library(ggplot2)
 library(tidyr)
 library(knitr)     # for kable
+library(glue)      # for glue
 # library(fuzzyjoin)   # regex_full_join
 
 source("../Milkys/991_Vannmiljo_snippets_functions.R")
@@ -86,7 +88,7 @@ dat_nb_biota <- get_biota_chemistry(sampling_year, df_specimens, df_stations, re
 dat_nb_biota <- dat_nb_biota %>%
   mutate(Year = year(SAMPLE_DATE))
 
-# 421  
+# 1416  
 
 #
 ## Water samples  
@@ -103,8 +105,11 @@ message("No. of samples, water: ", nrow(df_samples_water))
 # Adds "SAMPLE_TYPE", "SAMPLE_NUMBER", "DESCRIPTION" and "n_labware" from Labware
 
 # debugonce(get_water_chemistry_from_stations)
-dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), sampling_year)
+dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), sampling_year,
+                                                  project_id = project_id)
 message("No. of measurements, water: ", nrow(dat_nb_water))
+
+# 9355  
 
 df_samples_sediment <- get_nivabase_selection(
   "*",
@@ -121,6 +126,8 @@ dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sedim
 dat_nb_sediment <- dat_nb_sediment %>%
   left_join(dat_nb_sediment_methods, by = "METHOD_ID") %>%
   mutate(Year = year(SAMPLE_DATE)) 
+
+# 224
 
 ```
 
@@ -148,53 +155,7 @@ dat_nb_biota %>%
 
 ### Hunt for more (and other) biota data  
 
-#### Samples form LIMS  
-```{r}
-
-dir("Data", "100_lims_samples_")
-fn_lims <- "Data/100_lims_samples_Urban_2022_2023-10-13.rds"
-df_lims <- readRDS(fn_lims)
-
-```
-
-#### Use LABWARE_BSID to get SAMPLE_ID  
-
-```{r}
-
-lookup_sampleid_bio <- get_nivabase_selection(
-  columns = "LABWARE_TEXT_ID, BIOTA_SAMPLE_ID", 
-  table = "LABWARE_BSID", selection_column = "LABWARE_TEXT_ID", 
-  selection_values = df_lims$TEXT_ID, values_are_text = TRUE)
-
-nrow(lookup_sampleid_bio)
-
-```
-
-#### Get data in Nivabase  
-
-```{r}
-
-df1 <- get_nivabase_selection(
-  "*",
-  "BIOTA_SAMPLES",
-  "SAMPLE_ID",
-  lookup_sampleid_bio$BIOTA_SAMPLE_ID
-)
-df2a <- get_nivabase_selection(
-  "*",
-  "BIOTA_SAMPLES_SPECIMENS",
-  "SAMPLE_ID",
-  lookup_sampleid_bio$BIOTA_SAMPLE_ID
-)
-df2b <- get_nivabase_selection(
-  "*",
-  "BIOTA_SINGLE_SPECIMENS",
-  "SPECIMEN_ID",
-  unique(df2a$SPECIMEN_ID)
-)
-get_biota_chemistry
-
-```
+* not this year (see 2022 version)  
 
 
 
@@ -215,11 +176,10 @@ dat_lab_biota <- get_nivabase_selection(
   "LABWARE_BSID", 
   "BIOTA_SAMPLE_ID", unique(dat_nb_biota$SAMPLE_ID)) 
 
-# No measurements in water 
-# dat_lab_water <- get_nivabase_selection(
-#   c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-#   "LABWARE_WSID",
-#   "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID))
+dat_lab_water <- get_nivabase_selection(
+  c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
+  "LABWARE_WSID",
+  "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID))
 
 dat_lab_sediment <- get_nivabase_selection(
   c("SLICE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
@@ -228,31 +188,112 @@ dat_lab_sediment <- get_nivabase_selection(
 
 ```
 
-## STUFF NOT USED HERE   
+## 4. Check water data  
 
+### Get labware sample metadata 
 
-### Add labware TEXT_ID to the data?  
-
-* Not done, as there may be two (or more?) Labware TEXT_ID per Nivabase SAMPLE_ID   
-
-* Demonstrated for biota  
-
-* Duplicate of BIOTA_SAMPLE_ID = 247003  
-    - Labware numbers NR-2021-07918 (DESCRIPTION = ØM-L-1) and NR-2021-11104 (DESCRIPTION = ØM-L-BP)  
-    - Seems to be two rounds of analyses: Some parameters has a value for DESCRIPTION = ØM-L-1 and value = "T" fpr DESCRIPTION = ØM-L-BP, some have the other  
+#### from sample file
 
 ```{r}
 
-# Expect this to have zero rows:
-check <- dat_lab_biota %>% add_count(BIOTA_SAMPLE_ID) %>% filter(n > 1)
+fns <- dir("Data", pattern = glue("100_dat_lab_{program_year}")) %>% rev()
+fn <- fns[1]
 
-if (nrow(check) == 0){
-  message("No duplicates of any SAMPLE_ID")
-} else {
-  stop("Duplicates of any SAMPLE_ID - see script 200_Nivabase_Milfersk_2021")
+meta_lab_water_1 <- readRDS(glue("Data/", {fn})) %>%
+  filter(TEXT_ID %in% dat_lab_water$LABWARE_TEXT_ID)
+
+nrow(dat_lab_water)
+nrow(meta_lab_water_1)
+
+if (nrow(dat_lab_water) > nrow(meta_lab_water_1)){
+  
+  # Some Nivabase data are not in the 
+  dat_lab_water_notfound <- dat_lab_water %>%
+    filter(!LABWARE_TEXT_ID %in% meta_lab_water_1$TEXT_ID)
+  
+  # dat_nb_water %>% 
+  #   filter(WATER_SAMPLE_ID %in% dat_lab_water_notfound$WATER_SAMPLE_ID) %>% View()
+  dat_nb_water %>% 
+    filter(WATER_SAMPLE_ID %in% dat_lab_water_notfound$WATER_SAMPLE_ID) %>% xtabs(~NAME, .)
+  # metals, UV, nutrients  
 }
 
 ```
+
+#### from Labware
+
+```{r}
+
+meta_lab_water <- get_nivabase_selection(
+  "*",  
+  "LABWARE_CHECK_SAMPLE", 
+  "TEXT_ID", 
+  dat_lab_water$LABWARE_TEXT_ID, 
+  values_are_text = TRUE)
+
+nrow(dat_lab_water)
+nrow(meta_lab_water_1)
+nrow(meta_lab_water)
+
+```
+### Check 1  
+```{r}
+
+check_meta <- meta_lab_water %>%
+  filter(grepl("Alna River Water 1", DESCRIPTION)) %>%
+  select(TEXT_ID, DESCRIPTION)
+check_meta  # two lines
+
+check_textid <- check_meta %>%
+  pull(TEXT_ID)
+
+check_lookup <- dat_lab_water %>%
+  filter(LABWARE_TEXT_ID %in% check_textid)
+table(check_lookup$LABWARE_TEXT_ID)   # 2 values
+table(check_lookup$WATER_SAMPLE_ID)   # 1 value  
+
+check_id <- check_lookup %>%
+  pull(WATER_SAMPLE_ID)
+check_id  # two IDs in lookup (BUT THEY ARWE THE SAME.....) 
+
+check_data <- dat_nb_water %>%
+  filter(WATER_SAMPLE_ID %in% check_id)
+
+table(check_data$WATER_SAMPLE_ID)
+# One ID in the NB data  
+
+```
+
+#
+```{r}
+
+dat_lab_water %>%
+  filter(WATER_SAMPLE_ID == 13579823) %>%
+  left_join(meta_lab_water,
+            by = c("LABWARE_TEXT_ID" = "TEXT_ID"), relationship = "many-to-one") %>%
+  select(WATER_SAMPLE_ID, LABWARE_TEXT_ID, DESCRIPTION)
+
+dat_nb_water %>% filter(WATER_SAMPLE_ID == 13579823) %>% View()
+
+```
+
+
+```{r}
+
+table(dat_nb_water$WATER_SAMPLE_ID)
+table(dat_nb_water$STATION_CODE)
+
+check <- dat_nb_water %>%
+  count(STATION_CODE, WATER_SAMPLE_ID, name = "n_meas")
+
+check %>%
+  count(STATION_CODE, name = "n_samples")
+
+```
+
+
+
+
 
 #### Number of parameters per sample    
 
@@ -302,6 +343,34 @@ if (FALSE){
   files <- dir("Data", "200_dat_nb_sediment_", full.names = TRUE) %>% sort(decreasing = TRUE)
   dat_nb_sediment <- readRDS(files[1])
   table(dat_nb_sediment$SLICE_ID)
+}
+
+```
+
+
+
+## STUFF NOT USED HERE   
+
+
+### Add labware TEXT_ID to the data?  
+
+* Not done, as there may be two (or more?) Labware TEXT_ID per Nivabase SAMPLE_ID   
+
+* Demonstrated for biota  
+
+* Duplicate of BIOTA_SAMPLE_ID = 247003  
+    - Labware numbers NR-2021-07918 (DESCRIPTION = ØM-L-1) and NR-2021-11104 (DESCRIPTION = ØM-L-BP)  
+    - Seems to be two rounds of analyses: Some parameters has a value for DESCRIPTION = ØM-L-1 and value = "T" fpr DESCRIPTION = ØM-L-BP, some have the other  
+
+```{r}
+
+# Expect this to have zero rows:
+check <- dat_lab_biota %>% add_count(BIOTA_SAMPLE_ID) %>% filter(n > 1)
+
+if (nrow(check) == 0){
+  message("No duplicates of any SAMPLE_ID")
+} else {
+  stop("Duplicates of any SAMPLE_ID - see script 200_Nivabase_Milfersk_2021")
 }
 
 ```
