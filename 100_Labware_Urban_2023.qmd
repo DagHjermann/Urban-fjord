@@ -194,6 +194,21 @@ fn
 
 saveRDS(df_lab, fn)
 
+
+if (FALSE){
+  
+  # Read back
+  pattern <- glue::glue("100_dat_lab_{program_year}")
+  fns <- dir("Data", pattern) %>% rev()
+  fn <- paste0("Data/", head(fns, 1))
+  df_lab <- readRDS(fn)
+  table(df_lab$ANALYSEOPPDRAG)
+  
+  # Get ANALYSEOPPDRAG for SQL
+  options(useFancyQuotes = FALSE)
+  df_lab$ANALYSEOPPDRAG %>% unique() %>% sQuote() %>% paste(collapse = ", ")
+  
+}
 ```
 
 ## APPENDIX 1: Labware values   
