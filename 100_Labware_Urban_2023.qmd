@@ -140,6 +140,8 @@ df_lab %>%
 
 ## 5. Water samples with water and particular phase  
 
+### Table  
+
 ```{r}
 
 df_lab %>%
@@ -155,6 +157,32 @@ df_lab %>%
 
 ```
 
+### Add Nivabase sample ID for water    
+
+```{r}
+
+lookup_nbid_water <- get_nivabase_selection(
+  c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
+  "LABWARE_WSID",
+  "LABWARE_TEXT_ID", unique(df_lab$TEXT_ID), values_are_text = TRUE)
+
+df_lab <- df_lab %>%
+  left_join(lookup_nbid_water,
+            by = c("TEXT_ID" = "LABWARE_TEXT_ID"), relationship = "many-to-one")
+
+```
+
+### Check WATER_SAMPLE_ID  
+
+* same WATER_SAMPLE_ID for both phases  
+
+```{r}
+
+df_lab %>%
+  filter(SAMPLE_TYPE == "FERSKVANN") %>%
+  select(TEXT_ID, DESCRIPTION, WATER_SAMPLE_ID) 
+
+```
 
 
 ## 6. Save  
@@ -168,7 +196,7 @@ saveRDS(df_lab, fn)
 
 ```
 
-## 6. APPENDIX 1: Labware values   
+## APPENDIX 1: Labware values   
 
 ### One water sample with water + particle phase  
 
@@ -194,6 +222,60 @@ check %>%
 check %>%
   filter(UNITS == "NG_P_L_2" &  AQUAMONITOR_UNIT %in% c("µg/L", "µg/l")) %>%
   select(DESCRIPTION, REPORTED_NAME, NUMERIC_ENTRY, UNITS, AQUAMONITOR_UNIT, VERDI_I_AQUAMONITOR)
+
+```
+
+## APPENDIX 2: SQL examples  
+
+```{r}
+
+# all water samples in 2024, all columns  
+df_samples_water_all <- get_nivabase_data("
+select *
+from NIVADATABASE.LABWARE_CHECK_SAMPLE 
+where PROSJEKT like '%urban%' 
+and substr(TEXT_ID,4,4) = '2023'
+and SAMPLE_TYPE = 'FERSKVANN'
+                                ")
+
+# all accepted water samples with station in 2024, selected columns  
+df_samples_water <- get_nivabase_data("
+select a.TEXT_ID, a.DESCRIPTION, a.AQUAMONITOR_CODE, b.WATER_SAMPLE_ID 
+from NIVADATABASE.LABWARE_CHECK_SAMPLE a
+left join NIVADATABASE.LABWARE_WSID b on TEXT_ID = LABWARE_TEXT_ID 
+where PROSJEKT like '%urban%' 
+and substr(TEXT_ID,4,4) = '2023'
+and SAMPLE_TYPE = 'FERSKVANN'
+and AQUAMONITOR_CODE is not null
+and STATUS = 'Ferdig'
+                                ")
+
+  # Data from one sample with both phases 
+get_nivabase_data("
+  select DESCRIPTION, UNITS, AQUAMONITOR_UNIT  
+  from NIVADATABASE.LABWARE_IMPORT 
+  where TEXT_ID in ('NR-2023-06748', 'NR-2023-06749') 
+  ")
+
+# Summarize units for one sample with both phases  
+get_nivabase_data("
+select DESCRIPTION, UNITS, AQUAMONITOR_UNIT, count(*)
+from NIVADATABASE.LABWARE_IMPORT 
+where TEXT_ID in ('NR-2023-06748', 'NR-2023-06749')
+group by DESCRIPTION, UNITS, AQUAMONITOR_UNIT
+order by DESCRIPTION, UNITS, AQUAMONITOR_UNIT; 
+")
+
+get_nivabase_data("
+select DESCRIPTION, REPORTED_NAME, NUMERIC_ENTRY, UNITS, AQUAMONITOR_UNIT
+from NIVADATABASE.LABWARE_IMPORT 
+where TEXT_ID in ('NR-2023-06748', 'NR-2023-06749')
+and UNITS = 'NG_P_L_2' 
+and AQUAMONITOR_UNIT in ('µg/L', 'µg/l');
+")
+
+
+
 
 ```
 
