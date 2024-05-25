@@ -327,7 +327,7 @@ if (FALSE){
 }
 
 
-get_water_chemistry_from_stations <- function(station_id, year, station_metadata = NULL){
+get_water_chemistry_from_stations_OLD <- function(station_id, year, station_metadata = NULL){
   
   # Get station metadata
   if (is.null(station_metadata)){
@@ -345,7 +345,7 @@ get_water_chemistry_from_stations <- function(station_id, year, station_metadata
     station_id,
     extra_sql = paste(" and extract(YEAR from SAMPLE_DATE) = ", year)
   ) %>%
-    left_join(station_metadata, by = c("STATION_ID"))
+    left_join(station_metadata, by = c("STATION_ID"), )
   
   # xtabs(~STATION_CODE + year(SAMPLE_DATE), df_water)   
   
@@ -433,14 +433,15 @@ get_water_chemistry_from_stations <- function(station_id, years, station_metadat
   year_string <- paste0("(", paste(years, collapse = ","), ")")
   
   # WATER_SAMPLES - 1-3 records per station/year
-  df_water <- get_nivabase_selection(
+  df_water_1 <- get_nivabase_selection(
     "WATER_SAMPLE_ID, STATION_ID, SAMPLE_POINT_ID, SAMPLE_DATE, DEPTH1, DEPTH2", 
     "WATER_SAMPLES",
     "STATION_ID",
     station_id,
     extra_sql = paste(" and extract(YEAR from SAMPLE_DATE) in ", year_string)
-  ) %>%
-    left_join(station_metadata, by = c("STATION_ID"))
+  ) 
+  df_water <- df_water_1 %>%
+    left_join(station_metadata, by = c("STATION_ID"), relationship = "many-to-one")
   
   # xtabs(~STATION_CODE + year(SAMPLE_DATE), df_water)   
   
@@ -449,7 +450,10 @@ get_water_chemistry_from_stations <- function(station_id, years, station_metadat
     "WATER_SAMPLE_ID, VALUE, METHOD_ID, UNIT, NAME, LABORATORY, FLAG1, APPROVED, SAMPLE_DATE, DEPTH1, DEPTH2, STATION_ID, STATION_CODE, PROJECT_ID, PARAMETER", 
     "V_WATER_CHEMISTRY_SAMPLES",
     "STATION_ID", 
-    station_metadata$STATION_ID) %>%
+    station_metadata$STATION_ID,
+    extra_sql = paste(" and extract(YEAR from SAMPLE_DATE) in ", year_string))
+  
+  df_measurements_water_2 <- df_measurements_water_1 %>%
     mutate(Year = year(SAMPLE_DATE)) %>%
     filter(Year %in% years) %>%
     left_join(station_metadata, by = c("STATION_ID", "STATION_CODE", "PROJECT_ID"))
@@ -457,7 +461,7 @@ get_water_chemistry_from_stations <- function(station_id, years, station_metadat
   # xtabs(~STATION_CODE + Year, df_waterchem)
   
   # Water samples from Nivabasen ---
-  df_samples_water <- df_measurements_water_1 %>% 
+  df_samples_water <- df_measurements_water_2 %>% 
     filter(Year %in% years) %>%
     count(STATION_CODE, WATER_SAMPLE_ID, name = "n_nivabasen") %>%
     # Order for making "Samplenumber"
@@ -495,7 +499,7 @@ get_water_chemistry_from_stations <- function(station_id, years, station_metadat
   # samples_labware_water
   
   # Joining
-  df_measurements_water <- df_measurements_water_1 %>%
+  df_measurements_water <- df_measurements_water_2 %>%
     # Add "Samplenumber" (for joining with 'df_samples_labware_water') :      
     left_join(
       df_samples_water %>% select(STATION_CODE, WATER_SAMPLE_ID, Samplenumber),
@@ -506,7 +510,7 @@ get_water_chemistry_from_stations <- function(station_id, years, station_metadat
       by = c("STATION_CODE" = "AQUAMONITOR_CODE", "Samplenumber" = "Samplenumber"))
   
   # Check!
-  if (nrow(df_measurements_water) != nrow(df_measurements_water_1)){
+  if (nrow(df_measurements_water) != nrow(df_measurements_water_2)){
     stop("nrow(final measurements) != nrow(measurements from V_WATER_CHEMISTRY_SAMPLES)!")
   }
   
