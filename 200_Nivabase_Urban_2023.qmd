@@ -196,7 +196,8 @@ dat_lab_sediment <- get_nivabase_selection(
 
 ```{r}
 
-fns <- dir("Data", pattern = glue("100_dat_lab_{program_year}")) %>% rev()
+fns <- dir("Data", pattern = glue("100_dat_lab_{program_year}.*rds")) %>% rev()
+fns
 fn <- fns[1]
 
 meta_lab_water_1 <- readRDS(glue("Data/", {fn})) %>%
@@ -264,7 +265,7 @@ table(check_data$WATER_SAMPLE_ID)
 
 ```
 
-#
+### Check one 
 ```{r}
 
 dat_lab_water %>%
@@ -273,7 +274,29 @@ dat_lab_water %>%
             by = c("LABWARE_TEXT_ID" = "TEXT_ID"), relationship = "many-to-one") %>%
   select(WATER_SAMPLE_ID, LABWARE_TEXT_ID, DESCRIPTION)
 
-dat_nb_water %>% filter(WATER_SAMPLE_ID == 13579823) %>% View()
+nb_water_one_sample <- dat_nb_water %>% 
+  filter(WATER_SAMPLE_ID == 13579823) %>%
+  mutate(NAME_type = ifelse(
+    stringr::str_sub(NAME, start = -2) == "-P",
+    "Particle phase",
+    "Water phase")
+    )
+
+xtabs(~NAME_type + paste(STATION_CODE, SAMPLE_DATE), nb_water_one_sample)
+
+# View(nb_water_one_sample)
+
+```
+
+### Check one substance
+
+```{r}
+
+nb_water_one_substance <- dat_nb_water %>% filter(grepl("PCB 118", NAME)) 
+
+xtabs(~STATION_CODE + SAMPLE_DATE + NAME, nb_water_one_substance)
+
+# View(nb_water_one_substance)
 
 ```
 
