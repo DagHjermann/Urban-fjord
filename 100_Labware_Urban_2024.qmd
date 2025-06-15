@@ -1,5 +1,5 @@
 ---
-title: "100_Labware_Urban_2023"
+title: "100_Labware_Urban_2024"
 format: html
 ---
 
@@ -8,14 +8,21 @@ format: html
 - function get_labware_samples    
 - for comparing samples in Labware with samples in report, and (later) with other data   
 
+## 2024:
+* Message from Aquamonitor, when trying to male Vannimjø files:   
+"Tissue type: (9) Annet, mangler kobling til medium. Dette legges inn manuelt med tabellen VANNMILJO.CONV_MEDIUM"
+    - meaning: Add matrix conversion for XX-Annet in VANNMILJO.CONV_MEDIUM - see "TISSUE = Annet" below     
+* Also: are water samples with water and particle phase analysed separately, correctly entered into Labware?
+    - Stored as "Stormwater 2; Particles" and "Stormwater 2; Water" - does this work?
+    - see "Check water samples"  
 
 ## 1. Settings  
 
 ### For filenames  
 ```{r}
 
-program_year <- "Urban_2023"
-current_year <- 2023
+program_year <- "Urban_2024"
+current_year <- 2024
 
 ```
 
@@ -28,6 +35,7 @@ library(purrr)
 library(lubridate)
 library(readxl)
 library(ggplot2)
+library(ggeasy)    # easy_ functions
 library(tidyr)  
 library(knitr)     # for kable
 library(glue)      # alternative to paste()  
@@ -60,7 +68,16 @@ df_samples_all <- df_samples_all %>%
     year_from_textid = substr(df_samples_all$TEXT_ID, 4, 7) %>% as.numeric())
 
 ggplot(df_samples_all, aes(x = SAMPLED_DATE, fill = factor(year_from_textid))) +
-  geom_histogram()
+  geom_histogram() +
+  scale_x_datetime(date_breaks = "2 months") +
+  easy_rotate_x_labels(angle = -45)
+
+ggplot(df_samples_all %>% filter(year_from_textid == current_year), 
+       aes(x = SAMPLED_DATE)) +
+  geom_histogram(fill = "red4") +
+  scale_x_datetime(date_breaks = "1 months") +
+  easy_rotate_x_labels(angle = -45)
+
 # Seal blubber samples in "early 2021" which has TEXT_ID for 2022 must have wrong SAMPLE_DATE   
 # See below
 
@@ -89,6 +106,8 @@ df_lab <- df_samples_all %>%
 
 ### Check columns that should be there     
 
+* 2024: AQUAMONITOR_CODE lacking for blanks, as it should be  
+
 ```{r}
 
 check <- check_lims_samples(df_lab)
@@ -108,24 +127,28 @@ df_lab %>%
 
 ```
 
+### Check water samples - whether particles/water phase is given correctly they are correct 
+
+#### Water samples from one station (one sample in 2024, with water+particle phase)     
+    - Stored as "Stormwater 2; Particles" and "Stormwater 2; Water" this year  
+    - Stored with "(P)" and "(W)" previous years - is this the correct way?  
+
+```{r}
+
+df_samples_all %>%
+  filter(AQUAMONITOR_CODE == "Urban #2") %>% 
+  arrange(SAMPLED_DATE) %>% # View()
+  select(SAMPLE_TYPE, SAMPLED_DATE, DESCRIPTION, AQUAMONITOR_CODE) 
+
+```
+
+
 #### Samples where station is lacking  
 #### Samples where station is lacking and species not given   
 
 * None lacking except 'blankprøve'  
 * See 2022 for examples of code  
 
-
-#### Check description for freshwater samples   
-
-* all are blanks  
-
-```{r}
-
-df_lab %>%
-  filter(is.na(AQUAMONITOR_ID) & SAMPLE_TYPE == "FERSKVANN") %>% # View()
-  count(TEXT_ID, DESCRIPTION) 
-
-```
 
 #### Check dates  
 
@@ -134,53 +157,89 @@ df_lab %>%
 ```{r}
 
 df_lab %>%
-  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SAMPLED_DATE)
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SAMPLED_DATE) %>% 
+  mutate(substr(AQUAMONITOR_NAME, 1, 20)) %>% 
+  arrange(SAMPLED_DATE)
 
 ```
 
-## 5. Water samples with water and particular phase  
-
-### Table  
+### Matrix  
 
 ```{r}
 
 df_lab %>%
-  filter(
-    grepl("(V)", DESCRIPTION, fixed = TRUE) |
-    grepl("(W)", DESCRIPTION, fixed = TRUE) |
-    grepl("(P)", DESCRIPTION, fixed = TRUE),
-  ) %>%
-  filter(
-    !grepl("Blank", DESCRIPTION, fixed = TRUE)
-  ) %>%
-  distinct(TEXT_ID, AQUAMONITOR_CODE, DESCRIPTION, SAMPLED_DATE)
+  count(SAMPLE_TYPE, TISSUE)
 
 ```
 
-### Add Nivabase sample ID for water    
+### TISSUE == Annet  
 
-```{r}
+* Message from Aquamonitor: Add matrix conversion for XX-Annet in VANNMILJO.CONV_MEDIUM  
+    - VANNMILJO.CONV_MEDIUM is the table convertion TISSUE in Labware to MATRIX in Vannmiljø  
+    - However, we shouldn't do that for 'XX-Annet', we should change it to correct TISUUE in Labware    
 
-lookup_nbid_water <- get_nivabase_selection(
-  c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_WSID",
-  "LABWARE_TEXT_ID", unique(df_lab$TEXT_ID), values_are_text = TRUE)
+#### Check which samples these are   
 
-df_lab <- df_lab %>%
-  left_join(lookup_nbid_water,
-            by = c("TEXT_ID" = "LABWARE_TEXT_ID"), relationship = "many-to-one")
-
-```
-
-### Check WATER_SAMPLE_ID  
-
-* same WATER_SAMPLE_ID for both phases  
+* These are all moss  
 
 ```{r}
 
 df_lab %>%
-  filter(SAMPLE_TYPE == "FERSKVANN") %>%
-  select(TEXT_ID, DESCRIPTION, WATER_SAMPLE_ID) 
+  filter(TISSUE == "XX-Annet") %>% 
+  select(DESCRIPTION, AQUAMONITOR_CODE, SPECIES, TISSUE)  
+
+```
+#### Check Vannmiljø 
+
+* Check https://vannmiljokoder.miljodirektoratet.no/medium?q=mose  
+    - or API: https://vannmiljoapi.miljodirektoratet.no/api/Public/GetMediumList  
+* What we need is "BPV"
+    - "MediumID": "BPV",
+    - "Name": "Biota plantevev",
+    - "Description": "Vevsprøver fra terrestriske planter f.eks. etasjemose og barnåler.  Analyseresultat angis i våtvekt."
+
+#### Check VANNMILJO.CONV_MEDIUM   
+
+* NIVA_CODE is the name that should be given in Labware  
+* For BPV (moss tissue), that is PLV  
+
+```{r}
+
+df_lookup_tissue <- get_nivabase_data(
+  "select TISSUE_ID,TISSUE_NAME, NIVA_CODE from NIVADATABASE.BIOTA_TISSUE_TYPES") 
+
+df_convmedium <- get_nivabase_data(
+  "select TISSUE_ID, MEDIUM_ID, DATATYPE_ID, STATION_TYPE_ID from VANNMILJO.CONV_MEDIUM") %>% 
+  left_join(
+    df_lookup_tissue, 
+    by = "TISSUE_ID", 
+    relationship = "one-to-one")
+
+df_convmedium %>% 
+  filter(MEDIUM_ID %in% "BPV")
+
+```
+
+
+#### Just for reference, check older samples with this tissue  
+
+* Given as 'PLV-Plantevev'  
+
+```{r}
+
+df_plantevev_examples <- get_nivabase_data(
+  "select * from NIVADATABASE.LABWARE_CHECK_SAMPLE where TISSUE like '%PLV%'")
+
+
+```
+
+
+#### Just for curiosity, check if there are other tables with MEDIUM_ID  
+
+```{r}
+get_nivabase_data(
+"select OWNER,TABLE_NAME from ALL_TAB_COLUMNS
+where column_name like '%MEDIUM_ID%'")
 
 ```
 
@@ -214,7 +273,7 @@ if (FALSE){
 
 ## APPENDIX 1: Labware values   
 
-### One water sample with water + particle phase  
+### One water sample with water + particle phase (Station "Urban #2")  
 
 * Particle phase are always AQUAMONITOR_UNIT = NA   
 * Correct: NG_P_L_2 -> ng/L 
@@ -224,7 +283,7 @@ if (FALSE){
 ```{r}
 
 check <- get_nivabase_selection(
-  "*", "LABWARE_IMPORT", "TEXT_ID", c("NR-2023-06748", "NR-2023-06749"), values_are_text = TRUE)   
+  "*", "LABWARE_IMPORT", "TEXT_ID", c("NR-2024-04475", "NR-2024-04482"), values_are_text = TRUE)  
 
 check %>%
   count(DESCRIPTION, UNITS, AQUAMONITOR_UNIT)
@@ -240,11 +299,23 @@ check %>%
   select(DESCRIPTION, REPORTED_NAME, NUMERIC_ENTRY, UNITS, AQUAMONITOR_UNIT, VERDI_I_AQUAMONITOR)
 
 ```
+### Check up on data with no AQUAMONITOR_UNIT
+
+```{r}
+
+check %>%
+  filter(is.na(AQUAMONITOR_UNIT)) %>%
+  select(DESCRIPTION, REPORTED_NAME, NUMERIC_ENTRY, UNITS, AQUAMONITOR_UNIT, VERDI_I_AQUAMONITOR)
+
+```
 
 ## APPENDIX 2: SQL examples  
 
 ```{r}
 
+if (FALSE){
+  # don't run this by accident
+  
 # all water samples in 2024, all columns  
 df_samples_water_all <- get_nivabase_data("
 select *
@@ -326,6 +397,8 @@ where b.LABWARE_TEXT_ID in ('NR-2023-06748', 'NR-2023-06749');
 
 table(df_nb_example$NAME) |> table()
 table(df_nb_example$METHOD_ID) |> table()
+
+}
 
 ```
 ### Check latest updates  
