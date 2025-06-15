@@ -1,5 +1,5 @@
 ---
-title: "Script 200_Nivabase_Urban_2022"
+title: "Script 200_Nivabase_Urban_2024"
 format: html
 ---
 
@@ -17,8 +17,8 @@ format: html
 ### For filenames  
 ```{r}
 
-program_year <- "Urban_2023"
-sampling_year <- 2023
+program_year <- "Urban_2024"
+sampling_year <- 2024
 project_id <- 8551      # see below
 
 ```
@@ -69,10 +69,131 @@ nrow(df_stations)
 
 ```
 
-#### Get all data    
+### Samples from script 100      
 
 * NOTE: No water - as stations haven't been defined for the water samples (see script 100)   
 
+```{r}
+
+dat_lims <- readRDS("Data/100_dat_lab_Urban_2024_2025-06-15.rds") # HARD-CODED
+
+# table(dat_lims$SAMPLE_TYPE)
+
+lookup_id_biota <- get_nivabase_selection(
+  "LABWARE_TEXT_ID, BIOTA_SAMPLE_ID",
+  "LABWARE_BSID",
+  "LABWARE_TEXT_ID",
+  subset(dat_lims, SAMPLE_TYPE == "BIOTA")$TEXT_ID, 
+  values_are_text = TRUE
+)
+
+lookup_id_water <- get_nivabase_selection(
+  "LABWARE_TEXT_ID, WATER_SAMPLE_ID",
+  "LABWARE_WSID",
+  "LABWARE_TEXT_ID",
+  subset(dat_lims, SAMPLE_TYPE == "FERSKVANN")$TEXT_ID, 
+  values_are_text = TRUE
+)
+
+# Add NIVAbasen IDs
+dat_lims_2 <- dat_lims %>% 
+  left_join(lookup_id_biota, by = c("TEXT_ID" = "LABWARE_TEXT_ID"), 
+            relationship = "one-to-one") %>% 
+  left_join(lookup_id_water, by = c("TEXT_ID" = "LABWARE_TEXT_ID"),
+            relationship = "one-to-one")
+
+```
+
+### Water data  
+
+#### Samples  
+
+
+```{r}
+
+df_samples_water <- get_nivabase_selection(
+  "*",
+  "WATER_SAMPLES",
+  "WATER_SAMPLE_ID",
+  subset(dat_lims_2, !is.na(WATER_SAMPLE_ID))$WATER_SAMPLE_ID
+)
+message("No. of samples, water: ", nrow(df_samples_water))
+
+
+```
+
+%### Values  
+
+```{r}
+
+#
+## Water data  
+#
+
+df_values_water_1 <- get_nivabase_selection(
+  "WATER_SAMPLE_ID, METHOD_ID, VALUE, FLAG1",
+  "WATER_CHEMISTRY_VALUES",
+  "WATER_SAMPLE_ID",
+  subset(dat_lims_2, !is.na(WATER_SAMPLE_ID))$WATER_SAMPLE_ID
+)
+message("No. of measurements, water: ", nrow(df_values_water_1))
+
+df_methods_water <- get_nivabase_selection(
+  "METHOD_ID, NAME, UNIT, LABORATORY, METHOD_REF, MATRIX_ID",
+  "METHOD_DEFINITIONS",
+  "METHOD_ID",
+  unique(df_values_water_1$METHOD_ID)
+)
+
+df_values_water_2 <- df_values_water_1 %>% 
+  left_join(df_methods_water)
+
+df_values_water_3 <- df_values_water_2 %>% 
+  left_join(dat_lims_2)
+
+```
+
+#### Check water samples 1
+
+Check that water samples are correctly entered 1
+
+```{r}
+
+# Sample IDs for one station
+id <- dat_lims_2 %>% 
+  filter(AQUAMONITOR_CODE == "Urban #2") %>% 
+  pull(WATER_SAMPLE_ID)
+
+# Values for this station, one parameter
+df_values_water_2 %>% 
+  filter(WATER_SAMPLE_ID %in% id & NAME %in% c("PFOA", "PFOA-P")) 
+
+```
+
+#### Check water samples 2
+
+```{r}
+
+# Sample IDs for one station
+id <- dat_lims_2 %>% 
+  filter(AQUAMONITOR_CODE == "Urban #2") %>% 
+  pull(WATER_SAMPLE_ID)
+
+# Values for this station, one parameter
+check <- df_values_water_2 %>% 
+  filter(WATER_SAMPLE_ID %in% id) %>% 
+  mutate(
+    NAME_orig = NAME,
+    NAME = sub("-P", "", NAME_orig, fixed = TRUE),
+    Particle_phase = grepl("-P", NAME_orig)
+  )
+xtabs(~NAME + Particle_phase, check)
+
+```
+
+#### Get all data    
+
+* NOTE: No water - as stations haven't been defined for the water samples (see script 100)   
 ```{r}
 
 # Code from script 0010  
@@ -98,7 +219,8 @@ df_samples_water <- get_nivabase_selection(
   "*",
   "WATER_SAMPLES",
   "STATION_ID",
-  df_stations$STATION_ID
+  df_stations$STATION_ID, 
+  extra_sql = paste("and extraxt(YEAR from SAMPLE_DATE) =", sampling_year)
 )
 message("No. of samples, water: ", nrow(df_samples_water))
 
@@ -121,6 +243,7 @@ message("No. of samples, sediment: ", nrow(df_samples_sediment))
 
 dat_nb_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, years = sampling_year)
 
+if ()
 dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sediment$METHOD_ID))
 
 dat_nb_sediment <- dat_nb_sediment %>%
