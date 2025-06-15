@@ -1,0 +1,343 @@
+---
+title: "100_Labware_Urban_2023"
+format: html
+---
+
+## Read samples from Labware LIMS   
+- Script 1**_Labware_[program]_[year]     
+- function get_labware_samples    
+- for comparing samples in Labware with samples in report, and (later) with other data   
+
+
+## 1. Settings  
+
+### For filenames  
+```{r}
+
+program_year <- "Urban_2023"
+current_year <- 2023
+
+```
+
+## 2. Packages and functions  
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)  
+library(knitr)     # for kable
+library(glue)      # alternative to paste()  
+# library(fuzzyjoin)   # regex_full_join
+
+source("../Milkys/991_Vannmiljo_snippets_functions.R")
+source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+source("0001_Functions_sql_and_more.R")
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+## 3. Get all samples  
+
+### Find projects/samples     
+```{r}
+
+df_proj <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where PROSJEKT = 'O 210135;ANA - Miljøgifter i en urban fjord (2021-2026)'") 
+
+df_proj <- get_nivabase_data("select PROSJEKT, ANALYSEOPPDRAG from NIVADATABASE.LABWARE_CHECK_SAMPLE where PROSJEKT like '%urban%'") %>%
+  distinct(PROSJEKT, ANALYSEOPPDRAG)
+
+df_samples_all <- get_nivabase_data("select * from NIVADATABASE.LABWARE_CHECK_SAMPLE where PROSJEKT like '%urban%'")
+
+df_samples_all <- df_samples_all %>%
+  mutate(
+    year = year(SAMPLED_DATE),
+    year_from_textid = substr(df_samples_all$TEXT_ID, 4, 7) %>% as.numeric())
+
+ggplot(df_samples_all, aes(x = SAMPLED_DATE, fill = factor(year_from_textid))) +
+  geom_histogram()
+# Seal blubber samples in "early 2021" which has TEXT_ID for 2022 must have wrong SAMPLE_DATE   
+# See below
+
+# xtabs(~addNA(year) + addNA(year_from_textid), df_samples_all)  
+# NOTE: 2022 data (acc. to text ID) with no date
+
+```
+
+
+### Get all samples 
+
+- ANALYSEOPPDRAG set by comparing with excel 'Samlede resultater 2022_Urbanfjord'   
+- https://niva365.sharepoint.com/:x:/r/sites/Miljgifterienurbanfjord2021-2026/_layouts/15/Doc.aspx?sourcedoc=%7B3C315A97-1A5F-4B0C-BDA5-C87DD05BF0A7%7D&file=Samlede%20resultater%202022_Urbanfjord.xlsx&action=default&mobileredirect=true   
+
+
+
+
+## 4. Samples in current year       
+```{r}
+
+df_lab <- df_samples_all %>% 
+  dplyr::filter(year_from_textid %in% current_year) %>% # nrow()
+  arrange(TEXT_ID)
+
+```
+
+### Check columns that should be there     
+
+```{r}
+
+check <- check_lims_samples(df_lab)
+
+```
+
+### Tables  
+
+#### Stations  
+
+* NOTE: Station lacking for 79 samples ! 
+
+```{r}
+
+df_lab %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME) 
+
+```
+
+#### Samples where station is lacking  
+#### Samples where station is lacking and species not given   
+
+* None lacking except 'blankprøve'  
+* See 2022 for examples of code  
+
+
+#### Check description for freshwater samples   
+
+* all are blanks  
+
+```{r}
+
+df_lab %>%
+  filter(is.na(AQUAMONITOR_ID) & SAMPLE_TYPE == "FERSKVANN") %>% # View()
+  count(TEXT_ID, DESCRIPTION) 
+
+```
+
+#### Check dates  
+
+* OK 
+
+```{r}
+
+df_lab %>%
+  count(AQUAMONITOR_ID, AQUAMONITOR_CODE, AQUAMONITOR_NAME, SAMPLED_DATE)
+
+```
+
+## 5. Water samples with water and particular phase  
+
+### Table  
+
+```{r}
+
+df_lab %>%
+  filter(
+    grepl("(V)", DESCRIPTION, fixed = TRUE) |
+    grepl("(W)", DESCRIPTION, fixed = TRUE) |
+    grepl("(P)", DESCRIPTION, fixed = TRUE),
+  ) %>%
+  filter(
+    !grepl("Blank", DESCRIPTION, fixed = TRUE)
+  ) %>%
+  distinct(TEXT_ID, AQUAMONITOR_CODE, DESCRIPTION, SAMPLED_DATE)
+
+```
+
+### Add Nivabase sample ID for water    
+
+```{r}
+
+lookup_nbid_water <- get_nivabase_selection(
+  c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
+  "LABWARE_WSID",
+  "LABWARE_TEXT_ID", unique(df_lab$TEXT_ID), values_are_text = TRUE)
+
+df_lab <- df_lab %>%
+  left_join(lookup_nbid_water,
+            by = c("TEXT_ID" = "LABWARE_TEXT_ID"), relationship = "many-to-one")
+
+```
+
+### Check WATER_SAMPLE_ID  
+
+* same WATER_SAMPLE_ID for both phases  
+
+```{r}
+
+df_lab %>%
+  filter(SAMPLE_TYPE == "FERSKVANN") %>%
+  select(TEXT_ID, DESCRIPTION, WATER_SAMPLE_ID) 
+
+```
+
+
+## 6. Save  
+
+```{r}
+
+fn <- glue::glue("Data/100_dat_lab_{program_year}_{today(tzone = 'UTC')}.rds")
+fn
+
+saveRDS(df_lab, fn)
+
+
+if (FALSE){
+  
+  # Read back
+  pattern <- glue::glue("100_dat_lab_{program_year}.*rds")
+  fns <- dir("Data", pattern) %>% rev()
+  fns
+  fn <- paste0("Data/", head(fns, 1))
+  df_lab <- readRDS(fn)
+  table(df_lab$ANALYSEOPPDRAG)
+  
+  # Get ANALYSEOPPDRAG for SQL
+  options(useFancyQuotes = FALSE)
+  df_lab$ANALYSEOPPDRAG %>% unique() %>% sQuote() %>% paste(collapse = ", ")
+  
+}
+```
+
+## APPENDIX 1: Labware values   
+
+### One water sample with water + particle phase  
+
+* Particle phase are always AQUAMONITOR_UNIT = NA   
+* Correct: NG_P_L_2 -> ng/L 
+* Correct: NG_P_ML -> ug/L 
+* But some have UNITS = "NG_P_L_2" but AQUAMONITOR_UNIT "µg/L" or "µg/l"  
+
+```{r}
+
+check <- get_nivabase_selection(
+  "*", "LABWARE_IMPORT", "TEXT_ID", c("NR-2023-06748", "NR-2023-06749"), values_are_text = TRUE)   
+
+check %>%
+  count(DESCRIPTION, UNITS, AQUAMONITOR_UNIT)
+
+```
+
+### Check up on data with discprepancy between UNITS and AQUAMONITOR_UNIT
+
+```{r}
+
+check %>%
+  filter(UNITS == "NG_P_L_2" &  AQUAMONITOR_UNIT %in% c("µg/L", "µg/l")) %>%
+  select(DESCRIPTION, REPORTED_NAME, NUMERIC_ENTRY, UNITS, AQUAMONITOR_UNIT, VERDI_I_AQUAMONITOR)
+
+```
+
+## APPENDIX 2: SQL examples  
+
+```{r}
+
+# all water samples in 2024, all columns  
+df_samples_water_all <- get_nivabase_data("
+select *
+from NIVADATABASE.LABWARE_CHECK_SAMPLE 
+where PROSJEKT like '%urban%' 
+and substr(TEXT_ID,4,4) = '2023'
+and SAMPLE_TYPE = 'FERSKVANN'
+")
+
+# LIMS sample data
+# all accepted water samples with station in 2024, selected columns  
+df_samples_water <- get_nivabase_data("
+select a.TEXT_ID, a.DESCRIPTION, a.AQUAMONITOR_CODE, b.WATER_SAMPLE_ID 
+from NIVADATABASE.LABWARE_CHECK_SAMPLE a
+left join NIVADATABASE.LABWARE_WSID b on TEXT_ID = LABWARE_TEXT_ID 
+where PROSJEKT like '%urban%' 
+and substr(TEXT_ID,4,4) = '2023'
+and SAMPLE_TYPE = 'FERSKVANN'
+and AQUAMONITOR_CODE is not null
+and STATUS = 'Ferdig'
+order by TEXT_ID
+")
+write_excel_csv(df_samples_water, "Data/100_dat_lab_Urban_2023_2024-30-05.csv")
+
+
+# LIMS sample data from one sample with both phases 
+check <- get_nivabase_data("
+select a.TEXT_ID, a.DESCRIPTION, a.AQUAMONITOR_CODE, a.SAMPLED_DATE, b.WATER_SAMPLE_ID 
+from NIVADATABASE.LABWARE_CHECK_SAMPLE a
+left join NIVADATABASE.LABWARE_WSID b on TEXT_ID = LABWARE_TEXT_ID 
+where TEXT_ID in ('NR-2023-06748', 'NR-2023-06749') 
+order by TEXT_ID
+")
+
+# LIMS concentration data from one sample with both phases 
+check <- get_nivabase_data("
+  select *  
+  from NIVADATABASE.LABWARE_IMPORT 
+  where TEXT_ID in ('NR-2023-06748', 'NR-2023-06749') 
+  ")
+
+# Summarize units for one sample with both phases  
+get_nivabase_data("
+select TEXT_ID, DESCRIPTION, UNITS, AQUAMONITOR_UNIT, count(*)
+from NIVADATABASE.LABWARE_IMPORT 
+where TEXT_ID in ('NR-2023-06748', 'NR-2023-06749')
+group by TEXT_ID, DESCRIPTION, UNITS, AQUAMONITOR_UNIT
+order by TEXT_ID, DESCRIPTION, UNITS, AQUAMONITOR_UNIT; 
+")
+
+# wrong units linked?
+get_nivabase_data("
+select DESCRIPTION, REPORTED_NAME, NUMERIC_ENTRY, UNITS, AQUAMONITOR_UNIT
+from NIVADATABASE.LABWARE_IMPORT 
+where TEXT_ID in ('NR-2023-06748', 'NR-2023-06749')
+and UNITS = 'NG_P_L_2' 
+and AQUAMONITOR_UNIT not in ('ng/L', 'ng/l');
+")
+
+# lacking unit
+get_nivabase_data("
+select DESCRIPTION, REPORTED_NAME, NUMERIC_ENTRY, UNITS, AQUAMONITOR_UNIT
+from NIVADATABASE.LABWARE_IMPORT 
+where TEXT_ID in ('NR-2023-06748', 'NR-2023-06749')
+and UNITS = 'NG_P_L_2' 
+and AQUAMONITOR_UNIT is null;
+")
+
+# Nivabase dta for one sample with both phases   
+# They all have two methods with same name  
+df_nb_example <- get_nivabase_data("
+select a.SAMPLE_DATE, a.DEPTH1, a.WATER_SAMPLE_ID, b.LABWARE_TEXT_ID, c.VALUE, c.FLAG1, c.METHOD_ID, d.NAME
+from NIVADATABASE.WATER_SAMPLES a
+left join NIVADATABASE.LABWARE_WSID b on a.WATER_SAMPLE_ID = b.WATER_SAMPLE_ID 
+left join NIVADATABASE.WATER_CHEMISTRY_VALUES c on a.WATER_SAMPLE_ID = c.WATER_SAMPLE_ID 
+left join NIVADATABASE.METHOD_DEFINITIONS d on c.METHOD_ID = d.METHOD_ID  
+where b.LABWARE_TEXT_ID in ('NR-2023-06748', 'NR-2023-06749');
+")
+
+table(df_nb_example$NAME) |> table()
+table(df_nb_example$METHOD_ID) |> table()
+
+```
+### Check latest updates  
+```{r}
+
+check <- get_nivabase_data("
+select * from all_tab_modifications where TABLE_OWNER in 'NIVADATABASE' and TIMESTAMP > (current_date - INTERVAL '1' DAY);
+")
+
+check2 <- get_nivabase_data("
+select * from NIVADATABASE.SEARCH_UPDATE where ENTERED_DATE > (current_date - INTERVAL '1' DAY);
+")
+
+```
+
