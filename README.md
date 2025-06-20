@@ -1,6 +1,12 @@
 # Urban-fjord
 R scripts for the Urban Fjord and Milfersk projects  
 
+## Project portal  
+* 210135 - Miljøgifter i en urban fjord (2021-2026)   
+* 210136 - Overvåking av miljøgifter i ferskvannsnæringsnett  
+    - Data 2014-2020: folder 17197_MILFERSK > 17197_Milfersk VANNMILJØ
+    - Data 2021-2025: other folders
+
 ## NOTE:  
 There are two other related repos/projects: 
 - This repo was started for Urban Fjord but at some point I continued in Milkys, script 992  
@@ -8,7 +14,7 @@ There are two other related repos/projects:
 
 ## Data flow   
 
-1. Read excel data from researchers 
+1. Read excel data from researchers   
 - Script name format: 300_Excel_[program]_[year]     
 - combining NIVA data (should be in Nivabase, but is sometimes stuck in Labware)   
 - custom code per file / project  
@@ -44,6 +50,47 @@ There are two other related repos/projects:
     - what is not in Nivabase, but in Labware and metadata needs to be added in Labware? (3a - 3b; to be added, then repeat the above)    
     
 * NOTE: water samples from later years (from 2021?) have water and particle phase. The particle phase data should be given by changing parameter name (parameter name in METHOD_DEFINITIONS) to [NAME] + "-P".  
+
+
+
+## Vannmiljø reporting
+
+* Vannprøve, partikkelfase  
+    - are given in Labware with "(P)"" or "(partikler)"" in the Description field   
+    - are given in Milkys as a separate parameter, by adding "-P" to the parameter name  
+    - In Vannmiljø use sampling method as below:  
+    "SamplingMethodID": "NS-ISO 5667-17:2008D",
+    "Name": "Partikler: Filtrering volumbasert",
+    "Description": "Prøvetaking - Del 17: Veiledning i prøvetaking av partikulært materiale i vann (ISO 5667-17:2008)",
+    "SortOrder": null
+    - Medium = PA
+    
+* Vannprøve, vannfase  
+    - are given in Labware with "(W)"" or "(vann)"" in the Description field   
+    - are given in Milkys without "-P" added to the parameter name  
+    - In Vannmiljø use sampling method = UKJENT  
+    - Medium = PA
+    - Provetakmetode_id = UKJENT
+    
+* Vannprøve, ufiltrert  
+    - Medium = VAR (Avløpsvann renset)
+    - Medium = VF (Ferskvann)
+    - Provetakmetode_id = NS-EN ISO 5667-6:2016	(Ferskvann (elver og bekker))
+
+* Sediment, grab (Van Veen etc.)  
+    - Medium = PA
+    - Provetakmetode_id = NS-EN ISO 5667-19B
+    
+* Sediment, grab (Van Veen etc.)  
+    - Medium = SS
+    - Provetakmetode_id = NS-EN ISO 5667-19B
+
+* Blue mussel
+    - Medium = BA
+    - Provetakmetode_id = NS 9434:2017-SE (not transplanted)
+    - Provetakmetode_id = NS 9434:2017-UP (transplanted)  
+    
+    
 
 
 

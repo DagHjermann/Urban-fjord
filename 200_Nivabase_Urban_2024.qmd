@@ -55,7 +55,7 @@ knitr::opts_chunk$set(results = 'hold')
 ```
 
 
-## 2.  Check existing NIVAbasen data    
+## 2. Stations (all years)     
 
 ```{r}
 
@@ -69,21 +69,21 @@ nrow(df_stations)
 
 ```
 
-### Samples from script 100      
+## 3. Samples from Labware, script 100      
 
 * NOTE: No water - as stations haven't been defined for the water samples (see script 100)   
 
 ```{r}
 
-dat_lims <- readRDS("Data/100_dat_lab_Urban_2024_2025-06-15.rds") # HARD-CODED
+dat_lims_1 <- readRDS("Data/100_dat_lab_Urban_2024_2025-06-15.rds") # HARD-CODED
 
-# table(dat_lims$SAMPLE_TYPE)
+# table(dat_lims_1$SAMPLE_TYPE)
 
 lookup_id_biota <- get_nivabase_selection(
   "LABWARE_TEXT_ID, BIOTA_SAMPLE_ID",
   "LABWARE_BSID",
   "LABWARE_TEXT_ID",
-  subset(dat_lims, SAMPLE_TYPE == "BIOTA")$TEXT_ID, 
+  subset(dat_lims_1, SAMPLE_TYPE == "BIOTA")$TEXT_ID, 
   values_are_text = TRUE
 )
 
@@ -91,12 +91,12 @@ lookup_id_water <- get_nivabase_selection(
   "LABWARE_TEXT_ID, WATER_SAMPLE_ID",
   "LABWARE_WSID",
   "LABWARE_TEXT_ID",
-  subset(dat_lims, SAMPLE_TYPE == "FERSKVANN")$TEXT_ID, 
+  subset(dat_lims_1, SAMPLE_TYPE == "FERSKVANN")$TEXT_ID, 
   values_are_text = TRUE
 )
 
 # Add NIVAbasen IDs
-dat_lims_2 <- dat_lims %>% 
+dat_lims <- dat_lims_1 %>% 
   left_join(lookup_id_biota, by = c("TEXT_ID" = "LABWARE_TEXT_ID"), 
             relationship = "one-to-one") %>% 
   left_join(lookup_id_water, by = c("TEXT_ID" = "LABWARE_TEXT_ID"),
@@ -104,10 +104,9 @@ dat_lims_2 <- dat_lims %>%
 
 ```
 
-### Water data  
+## 4. Water data  
 
-#### Samples  
-
+### Samples  
 
 ```{r}
 
@@ -115,26 +114,26 @@ df_samples_water <- get_nivabase_selection(
   "*",
   "WATER_SAMPLES",
   "WATER_SAMPLE_ID",
-  subset(dat_lims_2, !is.na(WATER_SAMPLE_ID))$WATER_SAMPLE_ID
+  subset(dat_lims, !is.na(WATER_SAMPLE_ID))$WATER_SAMPLE_ID
 )
 message("No. of samples, water: ", nrow(df_samples_water))
 
 
 ```
 
-%### Values  
+### Values  
 
 ```{r}
 
 #
-## Water data  
+## water data  
 #
 
 df_values_water_1 <- get_nivabase_selection(
-  "WATER_SAMPLE_ID, METHOD_ID, VALUE, FLAG1",
+  "WATER_SAMPLE_ID, METHOD_ID, VALUE, FLAG1, VALUE_ID",
   "WATER_CHEMISTRY_VALUES",
   "WATER_SAMPLE_ID",
-  subset(dat_lims_2, !is.na(WATER_SAMPLE_ID))$WATER_SAMPLE_ID
+  subset(dat_lims, !is.na(WATER_SAMPLE_ID))$WATER_SAMPLE_ID
 )
 message("No. of measurements, water: ", nrow(df_values_water_1))
 
@@ -146,21 +145,38 @@ df_methods_water <- get_nivabase_selection(
 )
 
 df_values_water_2 <- df_values_water_1 %>% 
-  left_join(df_methods_water)
+  left_join(df_methods_water, by = join_by(METHOD_ID))
 
-df_values_water_3 <- df_values_water_2 %>% 
-  left_join(dat_lims_2)
+# 'dat_lims' have several rows with the same WATER_SAMPLE_ID
+# dat_lims %>% 
+#   add_count(WATER_SAMPLE_ID) %>% 
+#   filter(n > 1) %>% 
+#   arrange(WATER_SAMPLE_ID)
+
+# Must summarize
+dat_lims_summ <- dat_lims %>% 
+  group_by(WATER_SAMPLE_ID) %>% 
+  summarise(
+    TEXT_ID = paste(TEXT_ID, collapse = ", "),
+    DESCRIPTION = paste(DESCRIPTION, collapse = " | ")
+  )
+            
+df_values_water <- df_values_water_2 %>% 
+  left_join(dat_lims_summ, by = join_by(WATER_SAMPLE_ID))
 
 ```
 
+
+
 #### Check water samples 1
 
-Check that water samples are correctly entered 1
+* Check that water samples are correctly entered  
+* Check one station, one parameter  
 
 ```{r}
 
 # Sample IDs for one station
-id <- dat_lims_2 %>% 
+id <- dat_lims %>% 
   filter(AQUAMONITOR_CODE == "Urban #2") %>% 
   pull(WATER_SAMPLE_ID)
 
@@ -172,351 +188,555 @@ df_values_water_2 %>%
 
 #### Check water samples 2
 
+* Check one station, one parameter  
+
 ```{r}
 
 # Sample IDs for one station
-id <- dat_lims_2 %>% 
+id <- dat_lims %>% 
   filter(AQUAMONITOR_CODE == "Urban #2") %>% 
   pull(WATER_SAMPLE_ID)
 
+# 13793769 13793769
+
 # Values for this station, one parameter
-check <- df_values_water_2 %>% 
+dat_temp <- df_values_water_2 %>% 
   filter(WATER_SAMPLE_ID %in% id) %>% 
   mutate(
     NAME_orig = NAME,
     NAME = sub("-P", "", NAME_orig, fixed = TRUE),
     Particle_phase = grepl("-P", NAME_orig)
   )
-xtabs(~NAME + Particle_phase, check)
+tab <- xtabs(~NAME + Particle_phase, dat_temp)
+# tab[1:10,]
+
+check <- apply(tab, 1, sum)
+table(check)
+# all values should be 2
 
 ```
+#### Check water samples 3
 
-#### Get all data    
-
-* NOTE: No water - as stations haven't been defined for the water samples (see script 100)   
-```{r}
-
-# Code from script 0010  
-
-# 
-## Biota samples
-#
-
-df_specimens <- get_specimens_from_stationdata(df_stations, years = sampling_year)
-message("No. of specimens, biota: ", nrow(df_specimens))
-dat_nb_biota <- get_biota_chemistry(sampling_year, df_specimens, df_stations, report_samples = TRUE)
-
-dat_nb_biota <- dat_nb_biota %>%
-  mutate(Year = year(SAMPLE_DATE))
-
-# 1416  
-
-#
-## Water samples  
-#
-
-df_samples_water <- get_nivabase_selection(
-  "*",
-  "WATER_SAMPLES",
-  "STATION_ID",
-  df_stations$STATION_ID, 
-  extra_sql = paste("and extraxt(YEAR from SAMPLE_DATE) =", sampling_year)
-)
-message("No. of samples, water: ", nrow(df_samples_water))
-
-# Adds "SAMPLE_TYPE", "SAMPLE_NUMBER", "DESCRIPTION" and "n_labware" from Labware
-
-# debugonce(get_water_chemistry_from_stations)
-dat_nb_water <- get_water_chemistry_from_stations(unique(df_samples_water$STATION_ID), sampling_year,
-                                                  project_id = project_id)
-message("No. of measurements, water: ", nrow(dat_nb_water))
-
-# 9355  
-
-df_samples_sediment <- get_nivabase_selection(
-  "*",
-  "SEDIMENT_SAMPLES",
-  "STATION_ID",
-  df_stations$STATION_ID
-)
-message("No. of samples, sediment: ", nrow(df_samples_sediment))
-
-dat_nb_sediment <- get_sediment_chemistry_from_stations(df_stations$STATION_ID, years = sampling_year)
-
-if ()
-dat_nb_sediment_methods <- get_chemistry_methods(method_id = unique(dat_nb_sediment$METHOD_ID))
-
-dat_nb_sediment <- dat_nb_sediment %>%
-  left_join(dat_nb_sediment_methods, by = "METHOD_ID") %>%
-  mutate(Year = year(SAMPLE_DATE)) 
-
-# 224
-
-```
-
-### Check biota data  
-
-#### Number of individuals per station  
-```{r}
-
-dat_nb_biota %>%
-  distinct(LATIN_NAME, STATION_CODE, SAMPLE_NO) %>%
-  count(LATIN_NAME, STATION_CODE)
-
-```
-
-#### Number of individuals per station  
-```{r}
-
-dat_nb_biota %>%
-  distinct(NAME, LATIN_NAME, SAMPLE_NO) %>%
-  count(NAME, LATIN_NAME, name = "number_ind") %>%
-  pivot_wider(names_from = LATIN_NAME, values_from = number_ind)
-
-```
-
-
-### Hunt for more (and other) biota data  
-
-* not this year (see 2022 version)  
-
-
-
-## 3. Couple Labware TEXT_ID per Nivabase SAMPLE_ID
-
-### Get Labware sample ID     
+* Check all stations, all parameters   
+* Most stations (26)have only water phase of the following:  
+    - Diklormetan, Klorheksidin, Triklormetan (kloroform)  
+* One station have only one phase for a few spubstances             
 
 ```{r}
 
-# get_nivabase_data("select * from NIVADATABASE.LABWARE_BSID where rownum < 6")  
-# get_nivabase_data("select * from NIVADATABASE.LABWARE_WSID where rownum < 6")  
-# get_nivabase_data("select * from NIVADATABASE.LABWARE_SLICE_ID where rownum < 6")  
+# Full data set
+dat_temp <- df_values_water_2 %>% 
+  mutate(
+    NAME_orig = NAME,
+    NAME = sub("-P", "", NAME_orig, fixed = TRUE),
+    Particle_phase = grepl("-P", NAME_orig)
+  )
 
-# unique(dat_nb_biota$SAMPLE_ID)
+tab <- xtabs(~NAME + Particle_phase + WATER_SAMPLE_ID, dat_temp)
 
-dat_lab_biota <- get_nivabase_selection(
-  c("BIOTA_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_BSID", 
-  "BIOTA_SAMPLE_ID", unique(dat_nb_biota$SAMPLE_ID)) 
+# test
+# str(tab)
+# tab[1:3, , 1:3]
+# tab[1:5, , "13793769"]
 
-dat_lab_water <- get_nivabase_selection(
-  c("WATER_SAMPLE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_WSID",
-  "WATER_SAMPLE_ID", unique(dat_nb_water$WATER_SAMPLE_ID))
+check1 <- apply(tab, c(1,3), sum)
+# check1[1:3, 1:3]
+table(check1)
+# all values should be 0 or 2
 
-dat_lab_sediment <- get_nivabase_selection(
-  c("SLICE_ID, LABWARE_SAMPLE_NUMBER, LABWARE_TEXT_ID"),
-  "LABWARE_SLICE_ID", 
-  "SLICE_ID", unique(dat_nb_sediment$SLICE_ID)) 
-
-```
-
-## 4. Check water data  
-
-### Get labware sample metadata 
-
-#### from sample file
-
-```{r}
-
-fns <- dir("Data", pattern = glue("100_dat_lab_{program_year}.*rds")) %>% rev()
-fns
-fn <- fns[1]
-
-meta_lab_water_1 <- readRDS(glue("Data/", {fn})) %>%
-  filter(TEXT_ID %in% dat_lab_water$LABWARE_TEXT_ID)
-
-nrow(dat_lab_water)
-nrow(meta_lab_water_1)
-
-if (nrow(dat_lab_water) > nrow(meta_lab_water_1)){
-  
-  # Some Nivabase data are not in the 
-  dat_lab_water_notfound <- dat_lab_water %>%
-    filter(!LABWARE_TEXT_ID %in% meta_lab_water_1$TEXT_ID)
-  
-  # dat_nb_water %>% 
-  #   filter(WATER_SAMPLE_ID %in% dat_lab_water_notfound$WATER_SAMPLE_ID) %>% View()
-  dat_nb_water %>% 
-    filter(WATER_SAMPLE_ID %in% dat_lab_water_notfound$WATER_SAMPLE_ID) %>% xtabs(~NAME, .)
-  # metals, UV, nutrients  
+# count those with 1
+check2 <- check1 == 1
+if (sum(check2)){
+  warning(sum(check2), " samples x parameters lack particle or water phase")
 }
 
-```
+# Check stations lacking particle or water phase for at least on substance
+check3 <- apply(check1==1, 2, sum)
 
-#### from Labware
+# Check parameters for one station
+id <- "13793743"
+# tab[,,id]
+pars_with_one_phase <- apply(tab[,,id], 1, sum) == 1
+# tab[pars_with_one_phase, , id]
 
-```{r}
-
-meta_lab_water <- get_nivabase_selection(
-  "*",  
-  "LABWARE_CHECK_SAMPLE", 
-  "TEXT_ID", 
-  dat_lab_water$LABWARE_TEXT_ID, 
-  values_are_text = TRUE)
-
-nrow(dat_lab_water)
-nrow(meta_lab_water_1)
-nrow(meta_lab_water)
-
-```
-### Check 1  
-```{r}
-
-check_meta <- meta_lab_water %>%
-  filter(grepl("Alna River Water 1", DESCRIPTION)) %>%
-  select(TEXT_ID, DESCRIPTION)
-check_meta  # two lines
-
-check_textid <- check_meta %>%
-  pull(TEXT_ID)
-
-check_lookup <- dat_lab_water %>%
-  filter(LABWARE_TEXT_ID %in% check_textid)
-table(check_lookup$LABWARE_TEXT_ID)   # 2 values
-table(check_lookup$WATER_SAMPLE_ID)   # 1 value  
-
-check_id <- check_lookup %>%
-  pull(WATER_SAMPLE_ID)
-check_id  # two IDs in lookup (BUT THEY ARWE THE SAME.....) 
-
-check_data <- dat_nb_water %>%
-  filter(WATER_SAMPLE_ID %in% check_id)
-
-table(check_data$WATER_SAMPLE_ID)
-# One ID in the NB data  
+# Check parameters lacking particle or water phase for at least on substance
+check4 <- apply(check1==1, 1, sum)
+check4[check4 > 0]
 
 ```
 
-### Check one 
+#### Klorheksidin  
+
+* Klorheksidin (Chlorhexidine) in filtered + unfiltered water, but also in unfiltered water for source tracing   
+* Diklormetan (Dichloromethane) and "Triklormetan (kloroform)" (trichloromethan): only unfiltered water for source tracing
 ```{r}
 
-dat_lab_water %>%
-  filter(WATER_SAMPLE_ID == 13579823) %>%
-  left_join(meta_lab_water,
-            by = c("LABWARE_TEXT_ID" = "TEXT_ID"), relationship = "many-to-one") %>%
-  select(WATER_SAMPLE_ID, LABWARE_TEXT_ID, DESCRIPTION)
+# Klorheksidin
+dat_temp2 <- dat_temp %>% 
+  filter(NAME == "Klorheksidin") %>% 
+  count(WATER_SAMPLE_ID, Particle_phase) 
 
-nb_water_one_sample <- dat_nb_water %>% 
-  filter(WATER_SAMPLE_ID == 13579823) %>%
-  mutate(NAME_type = ifelse(
-    stringr::str_sub(NAME, start = -2) == "-P",
-    "Particle phase",
-    "Water phase")
-    )
+xtabs(~WATER_SAMPLE_ID + Particle_phase, dat_temp2)
 
-xtabs(~NAME_type + paste(STATION_CODE, SAMPLE_DATE), nb_water_one_sample)
+# Diklormetan
+dat_temp2 <- dat_temp %>% 
+  filter(NAME == "Diklormetan") %>% 
+  count(WATER_SAMPLE_ID, Particle_phase) 
 
-# View(nb_water_one_sample)
+xtabs(~WATER_SAMPLE_ID + Particle_phase, dat_temp2)
+
+# Triklormetan (kloroform)
+dat_temp2 <- dat_temp %>% 
+  filter(NAME == "Triklormetan (kloroform)") %>% 
+  count(WATER_SAMPLE_ID, Particle_phase) 
+
+xtabs(~WATER_SAMPLE_ID + Particle_phase, dat_temp2)
 
 ```
 
-### Check one substance
+## 5. Biota data  
+
+### Samples  
 
 ```{r}
 
-nb_water_one_substance <- dat_nb_water %>% filter(grepl("PCB 118", NAME)) 
+df_samples_biota_1 <- get_nivabase_selection(
+  "SAMPLE_ID, TISSUE_ID, TAXONOMY_CODE_ID, STATION_ID, SAMPLE_DATE, SAMPLE_NO, REPNO",
+  "BIOTA_SAMPLES",
+  "SAMPLE_ID",
+  subset(dat_lims, !is.na(BIOTA_SAMPLE_ID))$BIOTA_SAMPLE_ID
+)
 
-xtabs(~STATION_CODE + SAMPLE_DATE + NAME, nb_water_one_substance)
+lookup_tissue <- get_nivabase_data(
+  "select TISSUE_ID, TISSUE_NAME from NIVADATABASE.BIOTA_TISSUE_TYPES")
 
-# View(nb_water_one_substance)
+df_samples_biota <- df_samples_biota_1 %>% 
+  left_join(lookup_tissue, join_by(TISSUE_ID), relationship = "many-to-one")
+
+mean(is.na(df_samples_biota$STATION_ID))
+table(addNA(df_samples_biota$STATION_ID))
+mean(is.na(df_samples_biota$SAMPLE_DATE))
+table(addNA(df_samples_biota$SAMPLE_DATE))
+
+message("No. of samples, biota: ", nrow(df_samples_biota))
 
 ```
 
+### Specimens  
 
 ```{r}
 
-table(dat_nb_water$WATER_SAMPLE_ID)
-table(dat_nb_water$STATION_CODE)
+df_samples_specimens <- get_nivabase_selection(
+  "SAMPLE_ID, SPECIMEN_ID",
+  "BIOTA_SAMPLES_SPECIMENS",
+  "SAMPLE_ID",
+  subset(dat_lims, !is.na(BIOTA_SAMPLE_ID))$BIOTA_SAMPLE_ID
+)
 
-check <- dat_nb_water %>%
-  count(STATION_CODE, WATER_SAMPLE_ID, name = "n_meas")
+df_specimens <- get_nivabase_selection(
+  "STATION_ID, SPECIMEN_ID, SPECIMEN_NO, DATE_CAUGHT, TAXONOMY_CODE_ID",
+  "BIOTA_SINGLE_SPECIMENS",
+  "SPECIMEN_ID",
+  subset(df_samples_specimens, !is.na(SPECIMEN_ID))$SPECIMEN_ID
+) %>% 
+  rename(STATION_ID_specimen = STATION_ID)
 
-check %>%
-  count(STATION_CODE, name = "n_samples")
+df_species_1 <- get_nivabase_selection(
+  "TAXONOMY_CODE_ID, CODE, NIVA_TAXON_ID",
+  "TAXONOMY_CODES",
+  "TAXONOMY_CODE_ID",
+  subset(df_specimens, !is.na(TAXONOMY_CODE_ID))$TAXONOMY_CODE_ID
+)
 
-```
+df_species_2 <- get_nivabase_selection(
+  "NIVA_TAXON_ID, LATIN_NAME",
+  "TAXONOMY",
+  "NIVA_TAXON_ID",
+  subset(df_species_1, !is.na(NIVA_TAXON_ID))$NIVA_TAXON_ID
+)
 
+df_specimens_all <- df_samples_specimens %>% 
+  full_join(df_specimens, join_by(SPECIMEN_ID)) %>% 
+  left_join(df_species_1, join_by(TAXONOMY_CODE_ID), relationship = "many-to-one") %>% 
+  left_join(df_species_2, join_by(NIVA_TAXON_ID), relationship = "many-to-one") 
 
+df_specimens <- df_specimens_all %>% 
+  group_by(SAMPLE_ID) %>% 
+  summarise(
+    STATION_ID_specimen = paste(unique(STATION_ID_specimen), collapse = " | "),
+    SPECIMEN_ID = paste(unique(SPECIMEN_ID), collapse = " | "),
+    SPECIMEN_NO = paste(unique(SPECIMEN_NO), collapse = " | "),
+    DATE_CAUGHT = paste(unique(DATE_CAUGHT), collapse = " | "),
+    TAXONOMY_CODE_ID = paste(unique(TAXONOMY_CODE_ID), collapse = " | "),
+    CODE = paste(unique(CODE), collapse = " | "),
+    LATIN_NAME = paste(unique(LATIN_NAME), collapse = " | "),
+  ) %>% 
+  arrange(
+    STATION_ID_specimen, as.numeric(SPECIMEN_NO))
 
-
-
-#### Number of parameters per sample    
-
-* n_samples = 2 for water samples  
-    - represents water and particle fractions from the same physical sample    
-    - 'Avløpsvann og avløpsslam' and 'Hamar overvann'   
-* n_samples = 3 for trout (ørret) and surface water    
-    - represents 3 physical samples      
-
-```{r}
-
-dat_nb_biota_names <- dat_nb_biota %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, name = "n_samples")
-df1 <- dat_nb_biota_names %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, n_samples)
-# df1
-
-dat_nb_water_names <- dat_nb_water %>%
-  mutate(LATIN_NAME = NA, TISSUE_NAME = NA) %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, name = "n_samples")
-df2 <- dat_nb_water_names %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, n_samples)
-# df2
-
-dat_nb_sediment_names <- dat_nb_sediment %>%
-  mutate(LATIN_NAME = NA, TISSUE_NAME = NA) %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, NAME, Year, name = "n_samples")
-df3 <- dat_nb_sediment_names %>%
-  count(STATION_NAME, LATIN_NAME, TISSUE_NAME, n_samples)
-# df3
-
-bind_rows(df1, df2, df3)
-
+# message("No. of speci, biota: ", nrow(df_samples_biota))
 
 ```
 
 
-## 4. Save  
+### Values  
 
 ```{r}
 
-saveRDS(dat_nb_biota, paste0("Data/200_dat_nb_biota_", program_year, "_", today(), ".rds"))
-saveRDS(dat_nb_water, paste0("Data/200_dat_nb_water_", program_year, "_", today(), ".rds"))
-saveRDS(dat_nb_sediment, paste0("Data/200_dat_nb_sediment_", program_year, "_", today(), ".rds"))
+#
+## biota  
+#
+
+df_values_biota_1 <- get_nivabase_selection(
+  "SAMPLE_ID, METHOD_ID, VALUE, FLAG1, VALUE_ID",
+  "BIOTA_CHEMISTRY_VALUES",
+  "SAMPLE_ID",
+  unique(subset(dat_lims, !is.na(BIOTA_SAMPLE_ID))$BIOTA_SAMPLE_ID)
+)
+message("No. of measurements, biota: ", nrow(df_values_biota_1))
+
+df_methods_biota <- get_nivabase_selection(
+  "METHOD_ID, NAME, UNIT, LABORATORY, METHOD_REF, MATRIX_ID",
+  "METHOD_DEFINITIONS",
+  "METHOD_ID",
+  unique(df_values_biota_1$METHOD_ID)
+)
+
+df_values_biota_2 <- df_values_biota_1 %>% 
+  left_join(df_methods_biota, by = join_by(METHOD_ID))
+
+# 'dat_lims' have several rows with the same WATER_SAMPLE_ID
+# dat_lims %>% 
+#   add_count(WATER_SAMPLE_ID) %>% 
+#   filter(n > 1) %>% 
+#   arrange(WATER_SAMPLE_ID)
+
+# Must summarize (just to be on the safe side, in the case of biota)
+dat_lims_summ <- dat_lims %>% 
+  group_by(BIOTA_SAMPLE_ID) %>% 
+  summarise(
+    TEXT_ID = paste(TEXT_ID, collapse = ", "),
+    DESCRIPTION = paste(DESCRIPTION, collapse = " | ")
+  )
+            
+df_values_biota <- df_values_biota_2 %>% 
+  left_join(dat_lims_summ, by = join_by("SAMPLE_ID" == "BIOTA_SAMPLE_ID"))
+
+```
+
+## 6. Stations  
+
+* Directly from the samples table (not via BIOTA_SINGLE_SPECIMENS)  
+
+```{r}
+
+station_ids <- unique(
+  c(
+    subset(df_samples_water, !is.na(STATION_ID))$STATION_ID,
+    subset(df_samples_biota, !is.na(STATION_ID))$STATION_ID
+  )
+)
+
+df_stations_1 <-  get_nivabase_selection(
+  "STATION_ID, STATION_CODE, STATION_NAME, PROJECT_ID",
+  "PROJECTS_STATIONS",
+  "STATION_ID",
+  station_ids
+)
+message("No. of station x projects: ", nrow(df_stations_1))
+
+df_stations_proj <-  get_nivabase_selection(
+  "PROJECT_ID, PROJECT_NAME",
+  "PROJECTS",
+  "PROJECT_ID",
+  unique(subset(df_stations_1, !is.na(PROJECT_ID))$PROJECT_ID)
+)
+
+df_stations_2 <- df_stations_1 %>% 
+  left_join(df_stations_proj, by = join_by(PROJECT_ID))
+
+# Could pick projects manually from this
+# View(df_stations_2)
+
+# We summarise instead
+df_stations_3 <- df_stations_2 %>% 
+  group_by(STATION_ID) %>% 
+  summarise(
+    STATION_CODE = paste(unique(STATION_CODE), collapse = " | "),
+    STATION_NAME = paste(unique(STATION_NAME), collapse = " | "),
+    PROJECT_ID = paste(unique(PROJECT_ID), collapse = " | "),
+    PROJECT_NAME = paste(unique(PROJECT_NAME), collapse = " | ")
+  )
+message("No. of stations: ", nrow(df_stations_3))
+ 
+df_stations_coord_1 <-  get_nivabase_selection(
+  "STATION_ID, GEOM_REF_ID",
+  "STATIONS",
+  "STATION_ID",
+  unique(subset(df_stations_3, !is.na(STATION_ID))$STATION_ID)
+)
+
+df_stations_coord_2 <-  get_nivabase_selection(
+  "SAMPLE_POINT_ID, LONGITUDE, LATITUDE, EPSG_SYS, X, Y",
+  "SAMPLE_POINTS",
+  "SAMPLE_POINT_ID",
+  unique(subset(df_stations_coord_1, !is.na(GEOM_REF_ID))$GEOM_REF_ID)
+)
+
+df_stations <- df_stations_3 %>% 
+  left_join(
+    df_stations_coord_1, by = "STATION_ID") %>% 
+  left_join(
+    df_stations_coord_2, by = c("GEOM_REF_ID"="SAMPLE_POINT_ID"))
+ 
+```
+
+
+
+## 7. Final datasets  
+
+```{r}
+
+df_water <- df_samples_water %>% 
+  left_join(df_stations %>% select(STATION_ID, STATION_CODE, STATION_NAME, LONGITUDE, LATITUDE), 
+            by = join_by(STATION_ID), 
+            relationship = "many-to-one") %>% 
+  left_join(df_values_water, 
+            by = join_by(WATER_SAMPLE_ID), 
+            relationship = "one-to-many")  
+
+df_biota <- df_samples_biota %>% 
+  left_join(df_stations %>% select(STATION_ID, STATION_CODE, STATION_NAME, LONGITUDE, LATITUDE), 
+            by = join_by(STATION_ID), 
+            relationship = "many-to-one") %>% 
+  left_join(df_specimens %>% select(SAMPLE_ID, STATION_ID_specimen, SPECIMEN_ID, LATIN_NAME), 
+            by = join_by(SAMPLE_ID), 
+            relationship = "many-to-one") %>% 
+  left_join(df_values_biota, 
+            by = join_by(SAMPLE_ID), 
+            relationship = "one-to-many")  
+
+```
+
+## 8. Save  
+
+```{r}
+
+fn_water <- glue::glue("Data/200_dat_water_{program_year}_{today(tzone = 'UTC')}.rds")
+saveRDS(df_water, fn_water)
+message("Saved water data as ", sQuote(fn_water))
+
+fn_biota <- glue::glue("Data/200_dat_biota_{program_year}_{today(tzone = 'UTC')}.rds")
+saveRDS(df_biota, fn_biota)
+message("Saved biota data as ", sQuote(fn_biota))
+
+fn_stations <- glue::glue("Data/200_dat_stations_{program_year}_{today(tzone = 'UTC')}.rds")
+saveRDS(df_stations, fn_stations)
+message("Saved station data as ", sQuote(fn_stations))
 
 if (FALSE){
-  files <- dir("Data", "200_dat_nb_sediment_", full.names = TRUE) %>% sort(decreasing = TRUE)
-  dat_nb_sediment <- readRDS(files[1])
-  table(dat_nb_sediment$SLICE_ID)
-}
+  
+  # Read back
+  pattern <- glue::glue("200_dat_water_{program_year}.*rds")
+  fns <- dir("Data", pattern) %>% rev()
+  fns
+  fn <- paste0("Data/", head(fns, 1))
+  dat <- readRDS(fn)
 
+}
 ```
 
 
+## 9. Known issues  
 
-## STUFF NOT USED HERE   
+### a. LATIN_NAME = 'NA'  (literally 'NA')  
 
-
-### Add labware TEXT_ID to the data?  
-
-* Not done, as there may be two (or more?) Labware TEXT_ID per Nivabase SAMPLE_ID   
-
-* Demonstrated for biota  
-
-* Duplicate of BIOTA_SAMPLE_ID = 247003  
-    - Labware numbers NR-2021-07918 (DESCRIPTION = ØM-L-1) and NR-2021-11104 (DESCRIPTION = ØM-L-BP)  
-    - Seems to be two rounds of analyses: Some parameters has a value for DESCRIPTION = ØM-L-1 and value = "T" fpr DESCRIPTION = ØM-L-BP, some have the other  
+* These are mostly insects, but also oligochaetes (earthworms and the like), see table 2 in report  
+* Diptera, Ephemeroptera, Trichoptera are insects   
+* Vannmiljø:
+    - "LatinskNavnID": 89,
+    - "VitenskapligNavn": "Insecta (Klasse)",
+    - "KategoriNavn": "Klasse",
 
 ```{r}
 
-# Expect this to have zero rows:
-check <- dat_lab_biota %>% add_count(BIOTA_SAMPLE_ID) %>% filter(n > 1)
-
-if (nrow(check) == 0){
-  message("No duplicates of any SAMPLE_ID")
-} else {
-  stop("Duplicates of any SAMPLE_ID - see script 200_Nivabase_Milfersk_2021")
-}
+table(addNA(df_specimens$LATIN_NAME))
 
 ```
+
+
+### b. TISSUE_NAME = 'Annet'  
+
+* These are moss samples  
+* Should have been given as PLV (plantevev) in LIMS, see script 100  
+* Should have been given as TISSUE_ID = 104, TISSUE_NAME = Plantevev in Nivabase  
+* Vannmiljø:
+    - "MediumID": "BPV",
+    - "Name": "Biota plantevev",
+    - "Description": "Vevsprøver fra terrestriske planter f.eks. etasjemose og barnåler.  Analyseresultat angis i våtvekt."
+
+```{r}
+
+table(addNA(df_samples_biota$TISSUE_NAME))
+
+```
+### c. UNIT = 'NONE'  
+
+* Metals in particle phase have gotten UNIT = 'NONE'  
+* NEED TO CHECK WHY THIS IS WRONG IN VANNMILJØ  
+
+```{r}
+
+table(addNA(df_water_1$UNIT))
+
+test1 <- df_water_1 %>% 
+  filter(UNIT == "NONE")
+nrow(test1)  # 216
+xtabs(~NAME + STATION_NAME, test1)
+
+paramnames <- sub("-P$", "", unique(test1$NAME))
+test2 <- df_water_1 %>% 
+  filter(NAME %in% paramnames)
+nrow(test2)  # also 216, so these are correspondiong water phase
+
+# check that it's similar to above
+# xtabs(~NAME + STATION_NAME, test2)
+
+xtabs(~NAME + UNIT, test2)
+
+```
+
+## 9. Add Vannmiljø codes for water   
+
+### Prøvetakmetode  
+
+* Klorheksidin (Chlorhexidine) also in unfiltered water for source tracing   
+
+```{r}
+
+lookup_vm_samplingmethod <- fromJSON("https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSamplingMethodList?filter=")
+
+df_water_2 <- df_water_1 %>%
+  mutate(
+    NAME_nivabase = NAME,
+    NAME = sub("-P", "", NAME_nivabase, fixed = TRUE),
+    Particle_phase = grepl("-P", NAME_nivabase)
+  ) %>% 
+  # Also need to mark both particle and water fraction with 'Sample_filtered' 
+  # since this needs an extra 
+  group_by(
+    WATER_SAMPLE_ID, NAME) %>% 
+  mutate(
+    Particle_phase_n = sum(Particle_phase)) %>% 
+  ungroup() %>% 
+  mutate(
+    Sample_filtered = Particle_phase_n > 0) 
+  
+df_water_2 %>% filter(NAME == "PFOSA") %>% View()
+
+```
+
+
+## 10. Add Vannmiljø codes for biota 
+
+### Species  
+* All  
+    - https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSpeciesList?filter
+* Example  
+    - https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSpeciesList?filter=Insecta
+* LATIN_NAME = 'NA' hardcoded to 89 (Insecta)  
+    
+```{r}
+
+library(jsonlite)
+
+# test
+# fromJSON("https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSpeciesList?filter=Insecta")
+
+lookup_vm_species <- fromJSON("https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSpeciesList?filter=")
+
+df_biota_2 <- df_biota_1 %>% 
+  left_join(
+    lookup_vm_species %>% select(VitenskapligNavn, LatinskNavnID), 
+    by = join_by(LATIN_NAME == VitenskapligNavn), 
+    relationship = "many-to-one")
+
+table(addNA(df_biota_2$LatinskNavnID))
+
+sel <- is.na(df_biota_2$LatinskNavnID)
+sum(sel)
+# table(addNA(df_biota_2$LATIN_NAME[sel]))
+
+if (sum(sel) > 0){
+  warning("Species hard-coded where not found")
+}
+
+# HARD-CODED - see 8a above 
+df_biota_2$LatinskNavnID[sel] <- 89            # HARD-CODED FOR 2024 specifically
+df_biota_2$LATIN_NAME[sel] <- "Insecta"        # HARD-CODED FOR 2024 specifically
+
+# Check
+table(addNA(df_biota_2$LATIN_NAME))
+
+```
+
+
+### Tissue    
+
+```{r}
+
+table(df_biota_2$TISSUE_NAME)
+
+sel <- df_biota_2$TISSUE_NAME %in% "Annet"
+
+if (sum(sel) > 0){
+  warning("Tissue hard-coded where not found")
+  df_biota_2$TISSUE_ID[sel] <- 104                   # HARD-CODED FOR 2024 specifically
+  df_biota_2$TISSUE_NAME[sel] <- "Plantevev"         # HARD-CODED FOR 2024 specifically  
+  
+}
+
+df_convmedium <- get_nivabase_data(
+  "select TISSUE_ID, MEDIUM_ID, DATATYPE_ID, STATION_TYPE_ID from VANNMILJO.CONV_MEDIUM")
+
+df_biota_3 <- df_biota_2 %>% 
+  left_join(
+    df_convmedium %>% select(TISSUE_ID, MEDIUM_ID), 
+    by = join_by(TISSUE_ID), 
+    relationship = "many-to-one")
+
+sel <- is.na(df_biota_3$MEDIUM_ID)
+sum(sel)
+
+if (sum(sel) > 0){
+  stop("VN tissues lacking")
+} else 
+{
+  message("All VM tissues OK")
+}
+
+
+```
+
+## APPENDIX: check VANNMILJO tables    
+
+
+```{r}
+
+get_nivabase_data(
+"select OWNER,TABLE_NAME from ALL_TAB_COLUMNS 
+where column_name = 'SAMPLE_NUMBER';"
+)
+
+get_nivabase_data(
+"select OWNER,TABLE_NAME from ALL_TAB_COLUMNS 
+where OWNER = 'VANNMILJO';"
+)
+
+get_nivabase_data(
+"select * from ALL_TAB_COLUMNS 
+where OWNER = 'VANNMILJO' and TABLE_NAME = 'CONV_SAMPLING';"
+)
+
+```
+

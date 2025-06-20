@@ -414,3 +414,14 @@ select * from NIVADATABASE.SEARCH_UPDATE where ENTERED_DATE > (current_date - IN
 
 ```
 
+
+## APPENDIX 3: Values    
+
+```{r}
+
+df_samples <- readRDS("Data/100_dat_lab_Urban_2024_2025-06-15.rds")
+df_values <- get_labware_import(text_id = df_samples$TEXT_ID)
+
+
+```
+
