@@ -1,0 +1,1201 @@
+---
+title: "400_VMexport_Urbanfjord_2024"
+format: html
+editor: visual
+---
+
+## For filenames  
+```{r}
+
+program <- "urbanfjord"
+sampling_year <- 2024
+
+```
+
+## 1. Packages and functions
+
+```{r}
+
+library(niRvana)
+library(dplyr)
+library(purrr)
+library(lubridate)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+library(jsonlite)
+library(glue)      # for glue
+library(datapasta)
+library(stringdist)    # for functions in '400_parameter_matching_functions.R'
+# library(fuzzyjoin)   # regex_full_join
+
+source("400_parameter_matching_functions.R")   # for parameter matching, see part 4
+
+# source("../Milkys/991_Vannmiljo_snippets_functions.R")
+# source("../Milkys/992_Vannmiljo_Urban_fjord_functions.R")
+# source("../Milkys/994_Industry_data_functions.R")         # for add_coordinates()
+
+knitr::opts_chunk$set(results = 'hold')
+
+```
+
+## 2. Read data
+
+```{r}
+
+df_water_1 <- readRDS('Data/200_dat_water_Urban_2024_2025-06-17.rds')
+df_biota_1 <- readRDS('Data/200_dat_biota_Urban_2024_2025-06-17.rds')
+df_stations_1 <- readRDS('Data/200_dat_stations_Urban_2024_2025-06-17.rds')
+
+```
+
+## 3. Add Vannmiljø codes for stations
+
+### Add VANNKATEGORI 1
+
+-   Take VANNKATEGORI from the AqM log for existing stations
+
+```{r}
+
+df_stations_1 <- df_stations_1 %>% 
+  mutate(
+    Kilde_id = paste0("NIVA@", STATION_ID))
+
+ids <- df_stations_1$Kilde_id
+
+# Read the VANNMILJO log in AqM
+#   (how did we find this? see Appendix)  
+df_log_all <- get_nivabase_selection(
+  "*",
+  "LOGG_LOKALITETER", 
+  "VANNLOKALITETID",
+  ids, 
+  owner = "VANNMILJO", values_are_text = TRUE)
+
+# summarize by taking the last log for each station  
+df_log_stations <- df_log_all %>% 
+  arrange(desc(ENTERED_DATE)) %>% 
+  group_by(VANNLOKALITETID) %>% 
+  summarize(across(everything(), .fns = first))
+
+# Add existing VANNKATEGORI to the data  
+df_stations_2 <- df_stations_1 %>% 
+  left_join(
+    df_log_stations %>% select(VANNLOKALITETID, VANNKATEGORI), 
+    by = join_by(Kilde_id == VANNLOKALITETID))
+
+# Check
+table(addNA(df_stations_2$VANNKATEGORI))
+# R = river  
+# U = uncategorized (used for storm water)
+
+sel_lacking <- is.na(df_stations_2$VANNKATEGORI)
+
+if (sum(sel_lacking) > 0){
+  warning(sum(sel_lacking), " stations lacking VANNKATEGORI (use next chunk)")
+}
+
+```
+
+### Add VANNKATEGORI 2
+
+-   Add VANNKATEGORI for stations without it (new stations)\
+-   
+
+```{r}
+
+# for making the code blow, first run this
+df <- df_stations_2[sel_lacking,] %>% 
+  mutate(VANNKATEGORI_new = "U") %>%    # this is just temporary - will be corrected in the tribble code below
+  select(Kilde_id, STATION_CODE, STATION_NAME, VANNKATEGORI_new) 
+
+# use datapasta to start code of data shown below
+# run this
+#   datapasta::tribble_format(df)
+# and then Ctrl + V
+
+# HARD_CODED FOR 2024 specifically
+# See Figure 1B in the report to set df_for_vannkategori
+df_for_vannkategori <- tibble::tribble(
+  ~Kilde_id,              ~STATION_CODE,                                     ~STATION_NAME, ~VANNKATEGORI_new,
+      "NIVA@74314",            "ALNA Evert. 1",                         "Alna River Evertebrat 1",           "R",
+      "NIVA@74315",              "Alna Mose 2",                               "Alna River Moss 2",           "R",
+      "NIVA@74316",            "ALNA Evert. 2",                         "Alna River Evertebrat 2",           "R",
+      "NIVA@74317",              "Alna Mose 3",                               "Alna River Moss 3",           "R",
+      "NIVA@74318",            "ALNA Evert. 3",                         "Alna River Evertebrat 3",           "R",
+      "NIVA@74637",        "Kværner (Kildesp)",                                         "Kværner",           "R",
+      "NIVA@74638",     "Smalvollv. (Kildesp)",                                   "Smalvollveien",           "U",
+      "NIVA@74639",    "Trosterudb. (Kildesp)",                                 "Trosterudbekken",           "U",
+      "NIVA@74640",       "Breivoll (Kildesp)",                             "Breivoll (Alnaelva)",           "R",
+      "NIVA@74641",       "Strømsv. (Kildesp)",                                 "Strømsveien 222",           "U",
+      "NIVA@74642", "Verks.Furul.v. (Kildesp)",                      "Verkseier Furulunds vei 9B",           "U",
+      "NIVA@74643",        "Vollav. (Kildesp)", "Vollaveien 20B. Enden av overvannsrør ut i Alna",           "U",
+      "NIVA@74644",     "Kjelsrudf. (Kildesp)",  "Avrenning Kjelsrudfyllingene. Rett før Kulvert",           "U",
+      "NIVA@74645",         "Brubak (Kildesp)",                               "Brubak (Alnaelva)",           "R",
+      "NIVA@74646",       "Stansev. (Kildesp)",                                  "Stanseveien 40",           "U",
+      "NIVA@74647",     "Julsbergb. (Kildesp)",             "Julsbergbekken. Utløp etter kulvert",           "U",
+      "NIVA@74648",    "Tokerudb. 1 (Kildesp)",              "Tokerudbekken, utløp etter kulvert",           "U",
+      "NIVA@74649",    "Tokerudb. 2 (Kildesp)",           "Tokerudbekken, oppstrøms bekkelukking",           "U"
+  )
+
+df_stations_3 <- df_stations_2 %>% 
+  left_join(
+    df_for_vannkategori %>% select(Kilde_id, VANNKATEGORI_new), 
+    by = join_by(Kilde_id)) %>% 
+  mutate(
+    VANNKATEGORI = case_when(
+      is.na(VANNKATEGORI_new) ~ VANNKATEGORI,
+      !is.na(VANNKATEGORI_new) ~ VANNKATEGORI_new))
+
+table(addNA(df_stations_3$VANNKATEGORI))
+
+# check
+# df_stations_3 %>% select(Kilde_id, STATION_CODE, STATION_NAME, VANNKATEGORI, VANNKATEGORI_new) %>%  View("kategori") 
+
+```
+
+### UTM zone
+
+```{r}
+
+table(df_stations_3$EPSG_SYS)
+
+lookup_utmzone <- tibble::tribble(
+  ~EPSG_SYS,   ~UtmSone,
+  32630,       30,
+  32631,       31,
+  32632,       32,
+  32633,       33,
+  32634,       34,
+  32635,       35,
+  32636,       36
+)
+
+df_stations_4 <- df_stations_3 %>% 
+  left_join(lookup_utmzone, by = join_by(EPSG_SYS), relationship = "many-to-one")
+
+
+```
+
+### For Vannmiljø
+
+```{r}
+
+df_stations_vm <- df_stations_4 %>% 
+  rename(
+    Navn = STATION_NAME,
+    Latitude = LATITUDE,
+    Longitude = LONGITUDE,
+    Vannkategori = VANNKATEGORI) %>% 
+  mutate(
+    Beskrivelse = "",
+    DatoOpprettet	= "", 
+    Hoyde = "",
+    UtmNord	= ifelse(is.na(UtmSone), NA, Y),
+    UtmOst	= ifelse(is.na(UtmSone), NA, X)) %>% 
+  select(
+    Kilde_id, Navn, Beskrivelse, DatoOpprettet, Hoyde, Latitude, Longitude, UtmSone, UtmNord, UtmOst, Vannkategori)
+
+
+```
+
+## 4. Add Vannmiljø codes for water
+
+### ID codes
+
+```{r}
+
+df_water_2 <- df_water_1 %>%
+  mutate(
+    Vannlok_kode = paste0("NIVA@", STATION_ID),       # note: called 'Kilde_id' in station file (LOK)  
+    ID_lokal = paste0("NIVA@WC@", VALUE_ID)) %>%      # note: WATER SAMPLE version
+  # add VANNKATEGORI - this is needed for water samples on order to set Provetakmetode + Medium  
+  left_join(
+    df_stations_4 %>% select(Kilde_id, VANNKATEGORI), 
+    by = join_by(Vannlok_kode == Kilde_id ), 
+    relationship = "many-to-one") 
+  
+
+```
+
+### Prøvetakmetode + medium 1
+
+-   Set sample type\
+-   Note that most substances in most locations are divided in water and particle phase\
+-   Exceptions:
+    -   Klorheksidin (Chlorhexidine) is in addition taken in unfiltered water (for source tracing)
+    -   Diklormetan and Triklormetan (kloroform) (Dichloromethane and trichloromethane) also in unfiltered water for source tracing
+
+```{r}
+
+df_water_3 <- df_water_2 %>%
+  mutate(
+    NAME_nivabase = NAME,
+    NAME = sub("-P", "", NAME_nivabase, fixed = TRUE),
+    Particle_phase = grepl("-P", NAME_nivabase)
+  ) %>% 
+  # Also need to mark both particle and water fraction with 'Sample_filtered' 
+  # since this needs an extra 
+  group_by(
+    WATER_SAMPLE_ID, NAME) %>% 
+  mutate(
+    Particle_phase_n = sum(Particle_phase)) %>% 
+  ungroup() %>% 
+  mutate(
+    Sample_filtered = Particle_phase_n > 0) 
+
+# View(df_water_3)
+# df_water_3 %>% filter(NAME == "PFOSA") %>% View()
+
+tabulate_samples <- function(param){
+  cat("----", param, "----\n")
+  df_water_3 %>% 
+    filter(NAME == param) %>%
+    xtabs(~Sample_filtered + Particle_phase, .) %>% 
+    print()
+  cat("\n")
+}
+
+# All samples filtered, both phases
+tabulate_samples("PFOS")
+# Some samples filtered, some not
+tabulate_samples("Klorheksidin")
+# No samples filtered
+tabulate_samples("Triklormetan (kloroform)")
+```
+
+### Prøvetakmetode + medium 2
+
+-   Set sample type codes
+
+```{r}
+
+lookup_vm_medium <- fromJSON(
+  "https://vannmiljoapi.miljodirektoratet.no/api/Public/GetMediumList?filter=")
+# lookup_vm_medium
+
+lookup_vm_samplingmethod <- fromJSON(
+  "https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSamplingMethodList?filter=")
+
+# NOTE: this is very Urban Fjord-specific  
+# In particular, STATION_ID 69644 is Bekkelaget Renseanlegg (Bekkelaget WWTP)  
+df_water_4 <- df_water_3 %>% 
+  mutate(
+    Medium_id = case_when(
+      Particle_phase ~ "PA"       ,      # Partikler
+      # STATION_ID %in% 69644 ~ "VAR",   # Avløpsvann renset   # NOTE: very Urban Fjord-specific" 
+      VANNKATEGORI %in% "R" ~ "VF",      # Ferskvann (river water)
+      VANNKATEGORI %in% "U" ~ "VOV"),    # Overvann
+    Provetakmetode_id = case_when(
+      Particle_phase ~ "NS-ISO 5667-17:2008D",                           # Partikler: Filtrering volumbasert
+      !Particle_phase & Sample_filtered ~ "UKJENT",                      # Used for the water phase of filtered samples 
+      !Particle_phase & !Sample_filtered ~ "NS-EN ISO 5667-6:2016")      # Ferskvann (elver og bekker)
+    ) %>% 
+  left_join(
+    lookup_vm_medium %>% select(MediumID, Medium_name = Name), 
+    by = join_by(Medium_id == MediumID)) %>% 
+  left_join(
+    lookup_vm_samplingmethod %>% select(SamplingMethodID, Provetakmetode_name = Name), 
+    by = join_by(Provetakmetode_id == SamplingMethodID))
+
+xtabs(~addNA(Medium_id) + addNA(Provetakmetode_id), df_water_4)
+xtabs(~addNA(Medium_name) + addNA(Provetakmetode_name), df_water_4)
+
+```
+
+### Units 1: Fix units
+
+-   Fix units for metals in particle phase\
+-   See script 200, issue no. 3
+
+```{r}
+
+# UNIT = NONE 
+table(addNA(df_water_4$UNIT))
+
+tabulate_samples("Yttrium")
+
+# example
+df_water_4 %>% 
+  filter(NAME %in% "Yttrium" & Sample_filtered) %>%
+  select(WATER_SAMPLE_ID, Particle_phase, Sample_filtered, NAME, VALUE, UNIT)
+
+df_water_affected_samples <- df_water_4 %>% 
+  filter(Sample_filtered) %>%
+  select(WATER_SAMPLE_ID, Particle_phase, NAME, UNIT) %>% 
+  pivot_wider(names_from = Particle_phase, values_from = UNIT, names_prefix = "Particle_") %>% 
+  filter(Particle_TRUE %in% "NONE")
+
+xtabs(~WATER_SAMPLE_ID + NAME, df_water_affected_samples)
+
+df_water_4b <- df_water_4 %>% 
+  left_join(
+    df_water_affected_samples %>%
+      select(WATER_SAMPLE_ID, NAME, UNIT_new = Particle_FALSE), 
+    by = join_by(WATER_SAMPLE_ID, NAME), 
+    relationship = "many-to-one")
+
+# check  
+df_water_4b %>% 
+  filter(NAME %in% "Yttrium" & Sample_filtered) %>%
+  select(WATER_SAMPLE_ID, Particle_phase, Sample_filtered, NAME, VALUE, UNIT, UNIT_new)
+
+df_water_5 <- df_water_4b %>% 
+  mutate(
+    UNIT = case_when(
+      UNIT %in% "NONE" ~ UNIT_new,
+      TRUE ~ UNIT)
+  ) %>% 
+  select(
+    -UNIT_new)
+  
+```
+
+### Units 2: Add VM code
+
+* Note: all metals codes will be changed to ug/L later - see 'Units 3'  
+
+```{r}
+
+lookup_vm_unit_all <- fromJSON(
+  "https://vannmiljoapi.miljodirektoratet.no/api/Public/GetUnitList?filter=")
+# lookup_vm_unit
+
+table(df_water_5$UNIT)
+
+# for starting on code below
+lookup_vm_unit_all %>% 
+  filter(UnitID %in% c(8,43,58)) %>% 
+  select(UnitID, Name, Description) %>%
+  mutate(UNIT = "") %>% 
+  datapasta::tribble_format()
+
+lookup_vm_unit <- tibble::tribble(
+  ~UnitID,  ~Name,          ~Description, ~UNIT,
+       8L, "µg/l", "mikrogram per liter",    "NG_P_ML",
+       8L, "µg/l", "mikrogram per liter",    "NG_P_ML_2",
+      43L, "mg/l", "milligram per liter",    "MG_P_L",
+      58L, "ng/l",  "nanogram per liter",    "NG_P_L_2",
+      58L, "ng/l",  "nanogram per liter",    "NG_P_L")
+
+df_water_6 <- df_water_5 %>% 
+  left_join(
+    lookup_vm_unit %>% select(UNIT, UnitID, Unit_VM = Name),
+    by = join_by(UNIT))
+
+xtabs(~addNA(Unit_VM) + addNA(UNIT), df_water_6)
+
+```
+
+
+### Parameters 1 - find matches   
+
+* From NAME (Nivabase) to Vannmiljø parameter name  
+* Strategy:
+    - match NAME (Dataset1 in part a) to "Abbreviation" (Dataset2 in part a) in the report Appendix  
+    - from the report Appendix, get CAS number (manually edited for a fes cases)
+    - from the CAS number, get Vannmiljø parameter name
+
+#### a. Perform matching 
+
+* using functions made by Claude, stored in '400_parameter_matching_functions.R'
+
+```{r}
+
+lookup_substances_cas_all <- readxl::read_excel(
+  "Input_data/Lookup_files/Urbanfjord_2024_parameter_list.xlsx") %>% 
+  filter(!is.na(Abbreviation))
+
+# 'norwegian_english_dict ' should be checked manually
+# View(norwegian_english_dict)
+
+dataset1 <- df_water_6 %>% 
+  distinct(NAME, METHOD_ID)
+
+dataset2 <- lookup_substances_cas_all
+
+# Perform the matching
+matching_results <- match_datasets(dataset1, dataset2, norwegian_english_dict)
+
+# Display summary statistics
+cat("=== MATCHING SUMMARY ===\n")
+cat("Total items in Dataset 1:", nrow(dataset1), "\n")
+cat("Total items in Dataset 2:", nrow(dataset2), "\n")
+cat("Total matches found:", sum(matching_results$Match_Type != "No Match Found"), "\n")
+cat("Unmatched items:", sum(matching_results$Match_Type == "No Match Found"), "\n\n")
+
+```
+
+#### b. Breakdown of match statistics
+
+* Breakdown of match type and quality 
+
+```{r}
+
+# Display match type breakdown
+match_type_summary <- table(matching_results$Match_Type)
+cat("=== MATCH TYPE BREAKDOWN ===\n")
+print(match_type_summary)
+cat("\n")
+
+# Display match quality breakdown
+match_quality_summary <- table(matching_results$Match_Quality)
+cat("=== MATCH QUALITY BREAKDOWN ===\n")
+print(match_quality_summary)
+cat("\n")
+
+```
+#### c. Unmatched parameters
+
+```{r}
+
+unmatched_items <- matching_results[matching_results$Match_Type == "No Match Found", ]
+# str(unmatched_items)
+
+if (F){
+  # this is used to make the code below
+  # run the code and use Ctrl+V to paste the resukt below
+  # then change "-" manually in the code
+  unmatched_items %>% 
+    select(NAME = Dataset1_NAME, METHOD_ID = Dataset1_METHOD_ID) %>% 
+    mutate(Abbreviation = "-") %>% 
+    datapasta::tribble_format()
+}
+
+df_manual <- tibble::tribble(
+                                       ~ NAME,          ~METHOD_ID,          ~Abbreviation,
+#                                "Diklormetan",               41601,                  "DCM",
+                                 "Bisfenol P",               40274,                  "Bisphenol P",
+                                       "BnBP",               40310,                  "BnBP (DBOEP)",
+                                       "BMEP",               40325,                  "BMEP (DMEP)",
+                 "L3 (octamethyltrisiloxane)",               40413,                  "L3",
+         "D6 (dodekametylsykloheksasiloksan)",               40414,                  "D6",
+           "D5 (dekametylsyklopentasiloksan)",               40416,                  "D5",
+  "M3T(Ph) (tris(trimetylsiloksy)fenylsilan)",               40418,                  "M3T (Ph)",
+             "L5 (dodecamethylpentasiloxane)",               40419,                  "L5",
+           "D4 (oktametylsyklotetrasiloksan)",               40420,                  "D4",
+               "L4 (decamethyltetrasiloxane)",               40421,                  "L4",
+                 "L3 (octamethyltrisiloxane)",               40936,                  "L3",
+                                       "BnBP",               40942,                  "BnBP (DBOEP)",
+                                 "Bisfenol P",               41036,                  "Bisphenol P",
+         "D6 (dodekametylsykloheksasiloksan)",               41050,                  "D6",
+           "D5 (dekametylsyklopentasiloksan)",               41072,                  "D5",
+  "M3T(Ph) (tris(trimetylsiloksy)fenylsilan)",               41094,                  "M3T (Ph)",
+             "L5 (dodecamethylpentasiloxane)",               41101,                  "L5",
+                                       "BMEP",               41111,                  "BMEP (DMEP)",
+           "D4 (oktametylsyklotetrasiloksan)",               41114,                  "D4",
+               "L4 (decamethyltetrasiloxane)",               41127,                  "L4",
+           "L6 (Tetradecamethylhexasiloxane)",               41603,                  "L6",
+           "L7 (Hexadecamethylheptasiloxane)",               41608,                  "L7",
+            "L8 (Octadecamethyloctasiloxane)",               41609,                  "L8",
+           "L6 (Tetradecamethylhexasiloxane)",               41610,                  "L6",
+           "L7 (Hexadecamethylheptasiloxane)",               41630,                  "L7",
+            "L8 (Octadecamethyloctasiloxane)",               41636,                  "L8",
+           "L7 (Hexadecamethylheptasiloxane)",               41683,                  "L7",
+            "L8 (Octadecamethyloctasiloxane)",               41689,                  "L8"
+  )
+
+```
+
+
+### Parameters 2: make lookup file with CAS    
+
+```{r}
+
+lookup_substances_1a <- matching_results[matching_results$Match_Type != "No Match Found", ] %>%
+  rename(
+    NAME = Dataset1_NAME, METHOD_ID = Dataset1_METHOD_ID, 
+    Substances = Dataset2_Substances, Abbreviation = Dataset2_Abbreviation, Group = Dataset2_Group
+  )
+
+lookup_substances_1b <- df_manual %>%
+  left_join(lookup_substances_cas_all %>% select(Abbreviation, Substances, Group), 
+            by = join_by(Abbreviation), 
+            relationship = "many-to-one")
+
+# Check
+# head(lookup_substances_1a, 3)
+# head(lookup_substances_1b, 3)
+
+# check manually:
+# View(matching_results_2b)
+
+lookup_substances_1 <- bind_rows(lookup_substances_1a, lookup_substances_1b)
+
+lookup_substances_2 <- lookup_substances_1 %>% 
+  left_join(lookup_substances_cas_all, 
+            by = join_by(Abbreviation, Substances, Group), 
+            relationship = "many-to-one")
+
+```
+
+
+### Parameters 2: make lookup file with Vannmiljo names  
+
+```{r}
+
+lookup_vm_substances_all <- fromJSON(
+  "https://vannmiljoapi.miljodirektoratet.no/api/Public/GetParameterList?filter=")
+
+lookup_vm_substances <- lookup_vm_substances_all %>% 
+  add_count(CASnr) %>% 
+  filter(n == 1) %>% 
+  select(CASnr, ParameterID, VM_Name = Name, VM_Description = Description)
+
+lookup_substances_3 <- lookup_substances_2 %>% 
+  left_join(
+    lookup_vm_substances,
+    by = join_by(CAS_VM == CASnr), 
+    relationship = "many-to-one")
+
+```
+
+### Parameters 3: add ParameterID manually from VM 
+
+```{r}
+
+if (F){
+
+  # check
+  lookup_substances_3 %>% 
+    filter(is.na(ParameterID)) %>% 
+    View("lacking ParameterID")
+  
+  # this is used to make the code below
+  # run the code and use Ctrl+V to paste the resukt below
+  # then change "-" manually in the code
+  lookup_substances_3 %>% 
+    filter(is.na(ParameterID)) %>% 
+    select(NAME, Substances, Abbreviation, Group, ParameterID) %>% 
+    mutate(ParameterID = "-") %>% 
+    datapasta::tribble_format()
+}
+
+lookup_substances_3_manual_1 <- tibble::tribble(
+           ~NAME,                       ~Substances,  ~Abbreviation,                          ~Group, ~ParameterID,
+  "Klorheksidin",                   "Chlorhexidine", "Klorheksidin",         "Pesticides/Fungicides",          "CLHEX",
+    "Galaxolide",                      "Galaxolide",         "HHCB",                         "Musks",          "HHCB",
+    "DADMAC-C12",       "Didodecyldimethylammonium",   "DADMAC-C12", "Quaternary ammonium compounds",          "DADMAC-C12",
+    "DADMAC-C14",    "Dimethylditetradecylammonium",   "DADMAC-C14", "Quaternary ammonium compounds",          "DADMAC-C14",
+    "DADMAC-C16",     "Dihexadecyldimethylammonium",   "DADMAC-C16", "Quaternary ammonium compounds",          "DADMAC-C16",
+    "DADMAC-C18",     "Dimethyldioctadecylammonium",   "DADMAC-C18", "Quaternary ammonium compounds",          "DADMAC-C18",
+      "ATAC-C16",      "Hexadecyltrimethylammonium",     "ATAC-C16", "Quaternary ammonium compounds",          "ATAC-C16",
+      "ATAC-C18",      "Trimethyloctadecylammonium",     "ATAC-C18", "Quaternary ammonium compounds",          "ATAC-C18",
+       "BAC-C10",     "Benzyldimethyldecylammonium",      "BAC-C10", "Quaternary ammonium compounds",          "BAC-C10",
+       "BAC-C16", "Benzyldimethylhexadecylammonium",      "BAC-C16", "Quaternary ammonium compounds",          "BAC-C16",
+  )
+
+# check
+# lookup_substances_3_manual_1 %>% 
+#   filter(NAME != ParameterID)
+
+lookup_substances_3_manual <- lookup_substances_3_manual_1 %>% 
+  left_join(
+    lookup_vm_substances %>% select(CASnr, ParameterID, VM_Name, VM_Description),
+    by = join_by(ParameterID))
+
+```
+
+### Parameters 4: Final lookup table  
+
+```{r}
+
+lookup_substances <- bind_rows(
+  lookup_substances_3 %>% filter(!is.na(ParameterID)),
+  lookup_substances_3_manual
+)
+
+check <- is.na(lookup_substances$ParameterID)
+
+if (sum(check) > 0){
+  stop("Still lacking some ParameterID values")
+}
+
+check <- lookup_substances %>% 
+  add_count(METHOD_ID, NAME) %>% 
+  filter(n > 1) %>%
+  arrange(METHOD_ID, NAME) %>% 
+  select(NAME, METHOD_ID, Group, ParameterID, CAS_VM)
+
+if (nrow(check) > 0){
+  stop("Some NAME, METHOD_ID occur several times")
+}
+
+if (FALSE){
+  readr::write_csv2(lookup_substances, "Input_data/Lookup_files/lookup_substances_urbanfjord_water_2024.csv")
+  writexl::write_xlsx(lookup_substances, "Input_data/Lookup_files/lookup_substances_urbanfjord_water_2024.xlsx")
+}
+
+```
+
+### Parameters 5: add ParameterID to data  
+```{r}
+
+lookup_substances2 <- lookup_substances %>% 
+  distinct(NAME, ParameterID)
+
+df_water_7 <- df_water_6 %>% 
+  left_join(lookup_substances2, 
+            by = join_by(NAME),
+            relationship = "many-to-one")
+
+check <- df_water_7 %>% 
+  filter(is.na(ParameterID)) %>% 
+  distinct(NAME) %>% 
+  select(NAME)
+
+if (nrow(check) > 0){
+  stop("some lacking!")
+}
+
+```
+
+### Units 3: Change metal units to mg/L  
+
+* all metals should be µg/l (for water) or mg/kg (for biota)  
+    - see mail from Dag Rosland 27.06.2025: "En del av metall-dataene er oppgitt med feil enhetsID = 7 ( µg/kg v.v.) for biotamediene ('BH', 'BL', 'BM' og 'BPV') og feil enhetsID = 58 (ng/l) for vann- og partikkel-mediene ('VF', 'VOV' og 'PA'). Korrekt enhetsID skal være hhv. 42 (mg/kg v.v.) og 8  (µg/l). Fint om du kan korrigere enhetsID i vedlagte Excel-ark og sjekke om verdiene er oppgitt i de nevnte enhetene.
+
+
+```{r}
+
+if (FALSE){
+  # check with Dag Rosland mail 
+  # These have wrong units according to Dag R.:
+  metals_to_change <- c("DY","ER","EU","GD","HG", "HO","LA","LU","ND","PR","SB","SC","SM","TB","TM","YB")  
+  # Check that all are given as Group = metals:
+  lookup_substances %>% 
+    filter(ParameterID %in% metals_to_change) %>% 
+    xtabs(~addNA(Group), .)
+}
+
+metals <- subset(lookup_substances, Group %in% "Metals")$ParameterID |> unique()
+sel_rows <- with(df_water_7, ParameterID %in% metals & UnitID %in% 58)   # UnitID = 58: ng/L
+sum(sel_rows)
+# table(df_water_7$ParameterID[sel_rows])
+
+df_water_8 <- df_water_7
+df_water_8$VALUE <- df_water_7$VALUE/1000  
+df_water_8$UnitID <- 8                      # UnitID = 8: µg/L  
+
+```
+
+### Data for Vannmiljo 1
+
+```{r}
+
+df_water_vm_1 <- df_water_8 %>% 
+  rename(
+    Parameter_id = ParameterID,
+    Verdi = VALUE,
+    Enhet_id = UnitID
+  ) %>% 
+  mutate(
+    Aktivitet_id = "MIUR",
+    Oppdragsgiver = "Miljødirektoratet",
+    Oppdragstaker = "NIVA",
+    LatinskNavn_id = as.numeric(NA),
+    Filtrert_prove = "Nei",
+    Analysemetode_id = case_when(
+      Parameter_id %in% "SCB7" ~ "NS-EN ISO 6468",
+      TRUE ~ "UKJENT"),
+    Operator = case_when(
+      is.na(FLAG1) ~ "=",
+      TRUE ~ "<"),
+    Provenr = as.character(NA),
+    Tid_provetak = floor_date(SAMPLE_DATE, unit = "day") %>% as.character(),
+    Ovre_dyp = 0,
+    Nedre_dyp = 0,
+    DybdeEnhet = "m",
+    Ant_verdier = NA,
+    Kommentar = "",
+    Deteksjonsgrense = NA,
+    Kvantifiseringsgrense = NA
+  )
+
+table(addNA(df_water_8$FLAG1))
+table(addNA(df_water_vm_1$Operator))
+table(addNA(df_biota_vm_2$Operator))
+
+```
+
+### Data for Vannmiljo 2
+
+```{r}
+
+fn <- "Data_to_Vannmiljo/urban_vm/REG_water_2019-2021_kovirbv.xlsx"
+# readxl::excel_sheets(fn)
+df_example <- readxl::read_excel(fn, sheet = "REG_water_2019-2021_kovirbv")
+
+lookup_kommentar <- df_example %>% 
+  distinct(Parameter_id, Kommentar)
+
+check <- lookup_kommentar %>% 
+  add_count(Parameter_id) %>% 
+  filter(n > 1) %>%
+  arrange(Parameter_id)
+
+lookup_kommentar <- lookup_kommentar %>% 
+  filter(!is.na(Kommentar))
+
+df_water_vm_2 <- df_water_vm_1 %>% 
+  select(-Kommentar) %>% 
+  left_join(lookup_kommentar, by = "Parameter_id")
+
+```
+
+### Data for Vannmiljo 3
+```{r}
+
+# names(df_example) %>% dput()
+
+vars <- c("ID_lokal", "Vannlok_kode", "Aktivitet_id", "Oppdragsgiver", 
+          "Oppdragstaker", "Parameter_id", "Medium_id", "LatinskNavn_id", 
+          "Provetakmetode_id", "Filtrert_prove", "Analysemetode_id", "Operator", 
+          "Verdi", "Enhet_id", "Provenr", "Tid_provetak", "Ovre_dyp", "Nedre_dyp", 
+          "DybdeEnhet", "Ant_verdier", "Kommentar", "Deteksjonsgrense", 
+          "Kvantifiseringsgrense")
+
+df_vm_water <- df_water_vm_2[vars]
+
+```
+
+
+## 5. Add Vannmiljø codes for biota
+
+### Species
+
+-   All
+    -   https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSpeciesList?filter
+-   Example
+    -   https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSpeciesList?filter=Insecta
+-   LATIN_NAME = 'NA' hardcoded to 89 (Insecta)
+
+```{r}
+
+
+# test
+# fromJSON("https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSpeciesList?filter=Insecta")
+
+lookup_vm_species <- fromJSON("https://vannmiljoapi.miljodirektoratet.no/api/Public/GetSpeciesList?filter=")
+
+df_biota_2 <- df_biota_1 %>% 
+  left_join(
+    lookup_vm_species %>% select(VitenskapligNavn, LatinskNavnID), 
+    by = join_by(LATIN_NAME == VitenskapligNavn), 
+    relationship = "many-to-one")
+
+table(addNA(df_biota_2$LatinskNavnID))
+
+sel <- is.na(df_biota_2$LatinskNavnID)
+sum(sel)
+# table(addNA(df_biota_2$LATIN_NAME[sel]))
+
+if (sum(sel) > 0){
+  warning("Species hard-coded where not found")
+}
+
+# HARD-CODED - see 8a above 
+df_biota_2$LatinskNavnID[sel] <- 89            # HARD-CODED FOR 2024 specifically
+df_biota_2$LATIN_NAME[sel] <- "Insecta"        # HARD-CODED FOR 2024 specifically
+
+# Check
+table(addNA(df_biota_2$LATIN_NAME))
+
+```
+
+### Tissue
+
+```{r}
+
+table(df_biota_2$TISSUE_NAME)
+
+sel <- df_biota_2$TISSUE_NAME %in% "Annet"
+
+if (sum(sel) > 0){
+  warning("Tissue hard-coded where not found")
+  df_biota_2$TISSUE_ID[sel] <- 104                   # HARD-CODED FOR 2024 specifically
+  df_biota_2$TISSUE_NAME[sel] <- "Plantevev"         # HARD-CODED FOR 2024 specifically  
+  
+}
+
+df_convmedium <- get_nivabase_data(
+  "select TISSUE_ID, MEDIUM_ID, DATATYPE_ID, STATION_TYPE_ID from VANNMILJO.CONV_MEDIUM")
+
+df_biota_3 <- df_biota_2 %>% 
+  left_join(
+    df_convmedium %>% select(TISSUE_ID, MEDIUM_ID), 
+    by = join_by(TISSUE_ID), 
+    relationship = "many-to-one")
+
+sel <- is.na(df_biota_3$MEDIUM_ID)
+sum(sel)
+
+if (sum(sel) > 0){
+  stop("VN tissues lacking")
+} else 
+{
+  message("All VM tissues OK")
+}
+
+
+```
+
+
+### Units 1: Make lookup
+
+```{r}
+
+table(addNA(df_biota_3$UNIT))
+
+# df_biota_3 %>% 
+#   filter(UNIT == "NONE") %>% View("unit NONE")
+
+lookup_vm_unit_all <- fromJSON(
+  "https://vannmiljoapi.miljodirektoratet.no/api/Public/GetUnitList?filter=")
+
+# check and search for "våt" in Description field
+# View(lookup_vm_unit_all)
+
+if (FALSE){
+  # for starting on code below
+  lookup_vm_unit_all %>% 
+    filter(UnitID %in% c(1,2,7,42)) %>% 
+    select(UnitID, Name, Description) %>%
+    mutate(UNIT = "-") %>% 
+    datapasta::tribble_format()
+}
+
+lookup_vm_unit <- tibble::tribble(
+  ~UnitID,        ~Name,                         ~Description, ~UNIT,
+       1L,          "%",                            "prosent",   "PERCENT",
+       2L,     "% v.v.",            "prosent på våtvektbasis",   "PERCENTW_W",
+       7L, "µg/kg v.v.", "mikrogram per kilo på våtvektbasis",   "NG_P_G",
+      42L, "mg/kg v.v.", "milligram per kilo på våtvektbasis",   "MG_P_KG"
+  )
+
+
+
+```
+### Units 2: Add VM code
+
+```{r}
+
+df_biota_4 <- df_biota_3 %>% 
+  left_join(lookup_vm_unit %>% select(UNIT, UnitID), 
+            by = join_by(UNIT),
+            relationship = "many-to-one")
+
+```
+
+
+### Parameters: add ParameterID to data  
+
+```{r}
+
+# lookup_substances <- readxl::read_excel("Input_data/Lookup_files/lookup_substances_urbanfjord_water_2024.xlsx")
+
+lookup_substances2 <- lookup_substances %>% 
+  distinct(NAME, ParameterID)
+
+check <- lookup_substances2 %>% 
+  add_count(NAME) %>% 
+  filter(n > 1) %>%
+  arrange(NAME)
+
+if (nrow(check) > 0){
+  stop("NAME not unique")
+}
+
+df_biota_5 <- df_biota_4 %>% 
+  left_join(lookup_substances2 %>% select(NAME, ParameterID), 
+            by = join_by(NAME),
+            relationship = "many-to-one") %>% 
+  mutate(
+    ParameterID = case_when(
+      NAME %in% "Delta 13C" ~ "D13C",
+      NAME %in% "Delta 15N" ~ "D15N",
+      NAME %in% "Fettinnhold" ~ "LIPID",
+      NAME %in% "L9 (Eicosamethylnonasiloxane)" ~ "L9",
+      NAME %in% "L10 (Docosamethyldecasiloxane)" ~ "L10",
+      TRUE ~ ParameterID)
+  ) %>% 
+  filter(
+    !NAME %in% c("W% C/N", "% C", "% N")
+  )
+
+check <- df_biota_5 %>% 
+  filter(is.na(ParameterID)) %>% 
+  distinct(NAME) %>% 
+  select(NAME)
+
+if (nrow(check) > 0){
+  stop("some lacking!")
+}
+
+
+```
+
+### Add Medium ID
+
+```{r}
+
+lookup_vm_medium <- fromJSON(
+  "https://vannmiljoapi.miljodirektoratet.no/api/Public/GetMediumList?filter=")
+# lookup_vm_medium
+
+lookup_vm_species %>% 
+  filter(LatinskNavnID %in% c(27, 126, 16496, 108169))
+
+lookup_vm_medium
+
+if (FALSE){
+  table(addNA(df_biota_5$TISSUE_NAME))
+  table(addNA(df_biota_5$LATIN_NAME))
+  
+  lookup_vm_medium %>% 
+    filter(Name %in% c("Biota bløtdeler", "Biota helkropp", "Biota lever", "Biota muskelvev", "Biota plantevev")) %>% 
+    select(MediumID, Name) %>%
+    mutate(TISSUE_NAME = "-",
+           LATIN_NAME = "-") %>% 
+    datapasta::tribble_format()
+}
+
+lookup_medium_biota <- tibble::tribble(
+  ~MediumID,             ~Name, ~TISSUE_NAME, ~LATIN_NAME,
+       "BB", "Biota bløtdeler",          "WHole soft body",       "Mytilus edulis",
+       "BB", "Biota bløtdeler",          "WHole soft body",       "Pandalus borealis",
+       "BH",  "Biota helkropp",          "Hel organisme",         "Insecta",
+       "BH",  "Biota helkropp",          "Hel organisme",         "Polychaeta (Klasse)",
+       "BH",  "Biota helkropp",          "Hel organisme",         "Euphausiacea (Orden)",
+       "BL",     "Biota lever",          "Lever",         "Salmo trutta",
+       "BM", "Biota muskelvev",          "Muskel",         "Salmo trutta",
+      "BPV", "Biota plantevev",          "Plantevev",         "Fontinalis antipyretica"
+)
+
+df_biota_6 <- df_biota_5 %>% 
+  left_join(lookup_medium_biota %>% select(MediumID, TISSUE_NAME, LATIN_NAME),
+            by = join_by(TISSUE_NAME, LATIN_NAME), relationship = "many-to-one"
+  )
+
+```
+### Units 3: Change metal units to mg/kg  
+
+* all metals should be mg/L (for water) or mg/kg (for biota)  
+* similar to "Units 3" for water, see above, except that here we operate on per kg basis   
+* enhetsID = 7 ( µg/kg v.v.) to be changed to 42 (mg/kg v.v.)
+
+```{r}
+
+metals <- subset(lookup_substances, Group %in% "Metals")$ParameterID |> unique()
+sel_rows <- with(df_biota_6, ParameterID %in% metals & UnitID %in% 7)   # UnitID = 7: µg/kg
+sum(sel_rows)
+# table(df_water_7$ParameterID[sel_rows])
+
+df_biota_7 <- df_biota_6
+df_biota_7$VALUE <- df_biota_6$VALUE/1000  
+df_biota_7$UnitID <- 42                      # UnitID = 42: mg/kg v.v.  
+
+```
+
+### Data for Vannmiljo 1
+
+```{r}
+
+df_biota_vm_1 <- df_biota_7 %>% 
+  rename(
+    Parameter_id = ParameterID,
+    Verdi = VALUE,
+    Enhet_id = UnitID,
+    Medium_id = MediumID,                # different from water
+    LatinskNavn_id = LatinskNavnID       # different from water
+  ) %>% 
+  mutate(
+    Aktivitet_id = "MIUR",
+    Oppdragsgiver = "Miljødirektoratet",
+    Oppdragstaker = "NIVA",
+    Provetakmetode_id = "UKJENT",    # different from water
+    Filtrert_prove = "Nei",
+    Analysemetode_id = case_when(
+      Parameter_id %in% "SCB7" ~ "NS-EN ISO 6468",
+      TRUE ~ "UKJENT"),
+    Operator = case_when(
+      is.na(FLAG1) ~ "=",
+      TRUE ~ "<"),
+    Provenr = as.character(NA),
+    Tid_provetak = floor_date(SAMPLE_DATE, unit = "day") %>% as.character(),
+    Ovre_dyp = NA,              # different from water
+    Nedre_dyp = NA,             # different from water
+    DybdeEnhet = "NULL",        # different from water
+    Ant_verdier = NA,
+    Kommentar = "",
+    Deteksjonsgrense = NA,
+    Kvantifiseringsgrense = NA
+  )
+
+check <- df_biota_vm_1 %>% 
+  filter(is.na(Parameter_id)) %>% 
+  distinct(NAME) %>% 
+  select(NAME)
+
+```
+
+### Data for Vannmiljo 2
+
+```{r}
+
+# See above
+# fn <- "Data_to_Vannmiljo/urban_vm/REG_water_2019-2021_kovirbv.xlsx"
+# readxl::excel_sheets(fn)
+# df_example <- readxl::read_excel(fn, sheet = "REG_water_2019-2021_kovirbv")
+
+df_biota_vm_2 <- df_biota_vm_1 %>% 
+  select(-Kommentar) %>% 
+  left_join(lookup_kommentar, by = "Parameter_id")
+
+```
+
+### Add ID codes 
+
+```{r}
+
+df_biota_vm_2 <- df_biota_vm_2 %>%
+  mutate(
+    Vannlok_kode = paste0("NIVA@", STATION_ID),  # note: called 'Kilde_id' in station file (LOK)  
+    ID_lokal = paste0("NIVA@BIO@", VALUE_ID)     # note: BIOTA version
+  )
+
+```
+
+
+### Data for Vannmiljo 3
+```{r}
+
+# names(df_example) %>% dput()
+
+vars <- c("ID_lokal", "Vannlok_kode", "Aktivitet_id", "Oppdragsgiver", 
+          "Oppdragstaker", "Parameter_id", "Medium_id", "LatinskNavn_id", 
+          "Provetakmetode_id", "Filtrert_prove", "Analysemetode_id", "Operator", 
+          "Verdi", "Enhet_id", "Provenr", "Tid_provetak", "Ovre_dyp", "Nedre_dyp", 
+          "DybdeEnhet", "Ant_verdier", "Kommentar", "Deteksjonsgrense", 
+          "Kvantifiseringsgrense")
+
+setdiff(vars, names(df_biota_vm_2))
+
+df_vm_biota <- df_biota_vm_2[vars]
+
+
+```
+
+## 6. Combine water and biota data    
+
+### Combine data  
+
+```{r}
+
+df_vm_combined <- bind_rows(df_vm_water, df_vm_biota)
+
+```
+
+### Units: All metals to mg/kg v.v. 
+
+* All metals including mercury and rare earth metals should be in unit 42 (mg/kg v.v.) 
+
+```{r}
+
+if (FALSE){
+  # check with Dag Rosland mail 
+  # These have wrong units according to Dag R.:
+  metals_to_change <- c("DY","ER","EU","GD","HG", "HO","LA","LU","ND","PR","SB","SC","SM","TB","TM","YB")  
+  # Check that all are given as Group = metals:
+  lookup_substances %>% 
+    filter(ParameterID %in% metals_to_change) %>% 
+    xtabs(~addNA(Group), .)
+}
+
+sel_rows <- df_biota_3
+
+```
+
+### Check parameters    
+
+```{r}
+
+check <- df_vm_combined %>% 
+  filter(is.na(Parameter_id))
+if (nrow(check) > 0){
+  stop("some lacking!")
+}
+
+```
+
+### Check stations
+```{r}
+
+check <- df_vm_combined %>% 
+  filter(!Vannlok_kode %in% data_list$LOK$Kilde_id) %>% 
+  distinct(Vannlok_kode)
+
+if (nrow(check) > 0){
+  stop("some lacking!")
+}
+
+```
+
+### Check other columns    
+
+```{r}
+
+apply(is.na(df_vm_combined), 2, sum)
+
+```
+
+## 7. Final delivery  
+
+### Make data 
+```{r}
+
+data_list <- list(
+  LOK = df_stations_vm,
+  REG = df_vm_combined
+)
+
+
+```
+
+
+
+
+### Save
+```{r}
+
+
+t <- now(tzone = 'UTC') 
+timestring <- paste0(substr(t, 1, 10), "_t", substr(t, 12, 13), substr(t, 15, 16))
+
+fn <- glue::glue("Data_to_Vannmiljo/Data_{program}/DataVM_{program}_{sampling_year}_{timestring}.xlsx")
+fn
+writexl::write_xlsx(data_list, path = fn)
+
+```
+
+## APPENDIX: finding VANNMILJO tables in AqM
+
+```{r}
+
+get_nivabase_data(
+"select * from ALL_TAB_COLUMNS 
+where OWNER = 'VANNMILJO' and COLUMN_NAME = 'VANNKATEGORI';"
+)
+
+get_nivabase_data(
+"select * from VANNMILJO.LOGG_LOKALITETER 
+where rownum < 11"
+)
+
+get_nivabase_data(
+"select * from VANNMILJO.LOGG_REGISTRERINGER 
+where rownum < 11"
+)
+
+
+```
